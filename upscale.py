@@ -1,4 +1,5 @@
 from PIL import Image
+import random
 
 # Implementation of various upscaling pixel art filters - slow, just for
 # comparison, not real-time use. Only PIL is required.
@@ -113,6 +114,12 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
 
 def average_image(images):
   return pixelwise_combine(images,mix_pixels)
+
+def random_image(images):
+  def random_pixel(pixels):
+    return random.choice(pixels)
+
+  return pixelwise_combine(images,random_pixel)
 
 #============================================================================
 
@@ -540,6 +547,7 @@ def hq_2x(image):
 #============================================================================
 
 image = Image.open("test.png")
+random.seed(0)
 
 # basic algorithms:
 
@@ -559,6 +567,7 @@ result_scale_3x    = scale_3x(image)
 
 # combines:
 result_avg_eagle_scale_hq_epx_2x = average_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
+result_rnd_eagle_scale_hq_epx_2x = random_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
 
 # save the results:
 result_nn_2x.save("nearest_2x.png","PNG")
@@ -574,5 +583,6 @@ result_scale_3x.save("scale_3x.png","PNG")
 result_hq_2x.save("hq_2x.png","PNG")
 result_epx_2x.save("epx_2x.png","PNG")
 
-result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx","PNG")
+result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_avg","PNG")
+result_rnd_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_rnd","PNG")
 
