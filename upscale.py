@@ -115,6 +115,8 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
 def average_image(images):
   return pixelwise_combine(images,mix_pixels)
 
+#----------------------------------------------------------------------------
+
 def random_image(images):
   def random_pixel(pixels):
     return random.choice(pixels)
@@ -210,8 +212,8 @@ def linear_3x(image):
 def lines_2x(image):
   def func(pixels, coords):
     return (
-      (pixels[0][0], pixels[0][0]  ),
-      ((0,0,0), (0,0,0) )
+      (pixels[0][0], pixels[0][0]),
+      ((0,0,0), (0,0,0))
       )
 
   return upscale_n_times(image,2,func,1)
@@ -336,7 +338,7 @@ def eagle_3x(image):
 
 #----------------------------------------------------------------------------
 
-# another version of eagle x3 doesn't officially exist, made by the
+# another version of eagle x3, made by the
 # author of
 # https://code.google.com/archive/p/2dimagefilter/source/default/source?page=2
 
@@ -507,8 +509,6 @@ def hq_2x(image):
       order *= 2
 
     return result
-
-#----------------------------------------------------------------------------
 
   def func(pixels, coords):
     a = pixels[-1][-1]
