@@ -82,7 +82,7 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
 
   return result
 
-#=========================================
+#============================================================================
 
 def nearest_neighbour_2x(image):
   def func(pixels, coords):
@@ -92,6 +92,8 @@ def nearest_neighbour_2x(image):
       )
 
   return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
 
 def linear_2x(image):
   def func(pixels, coords):
@@ -107,6 +109,8 @@ def linear_2x(image):
 
   return upscale_n_times(image,2,func,1)
 
+#----------------------------------------------------------------------------
+
 def lines_2x(image):
   def func(pixels, coords):
     return (
@@ -115,6 +119,8 @@ def lines_2x(image):
       )
 
   return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
 
 # https://github.com/amadvance/scale2x/blob/master/scale2x.c
 # https://en.wikipedia.org/wiki/Pixel_art_scaling_algorithms#EPX.2FScale2.d.97.2FAdvMAME2.d.97
@@ -139,6 +145,8 @@ def scale_2x(image):
       )
 
   return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
 
 # https://github.com/amadvance/scale2x/blob/master/scale3x.c
 # https://en.wikipedia.org/wiki/Pixel_art_scaling_algorithms#EPX.2FScale2.d.97.2FAdvMAME2.d.97
@@ -172,7 +180,7 @@ def scale_3x(image):
 
   return upscale_n_times(image,3,func,1)
 
-# TODO: scale_4x
+#----------------------------------------------------------------------------
 
 # https://en.wikipedia.org/wiki/Pixel_art_scaling_algorithms#Eagle
 
@@ -191,7 +199,10 @@ def eagle_2x(image):
 
   return upscale_n_times(image,2,func,1)
 
-# eagle x3 algorithm found at
+#----------------------------------------------------------------------------
+
+# eagle x3 doesn't officially exist, the algorithm was made by the
+# author of
 # https://code.google.com/archive/p/2dimagefilter/source/default/source?page=2
 
 def eagle_3x(image):
@@ -226,6 +237,101 @@ def eagle_3x(image):
       )
 
   return upscale_n_times(image,3,func,1)
+
+#----------------------------------------------------------------------------
+
+# another version of eagle x3 doesn't officially exist, made by the
+# author of
+# https://code.google.com/archive/p/2dimagefilter/source/default/source?page=2
+
+def eagle_3xb(image):
+  def func(pixels, coords):
+    a = pixels[-1][-1]
+    b = pixels[0][-1]
+    c = pixels[1][-1]
+    d = pixels[-1][0]
+    e = pixels[0][0]
+    f = pixels[1][0]
+    g = pixels[-1][1]
+    h = pixels[0][1]
+    i = pixels[1][1]
+
+    return (
+        (
+          mix_pixels([a,b,d]) if compare_pixels_exact(a,b) and compare_pixels_exact(a,d) else e,
+          e,
+          mix_pixels([b,c,f]) if compare_pixels_exact(b,c) and compare_pixels_exact(c,f) else e
+        ),
+        (
+          e,
+          e,
+          e
+        ),
+        (
+          mix_pixels([d,g,h]) if compare_pixels_exact(d,g) and compare_pixels_exact(g,h) else e,
+          e,
+          mix_pixels([f,h,i]) if compare_pixels_exact(f,h) and compare_pixels_exact(h,i) else e 
+        )
+      )
+
+  return upscale_n_times(image,3,func,1)
+
+#----------------------------------------------------------------------------
+
+# https://code.google.com/archive/p/2dimagefilter/source/default/source?page=2
+
+def epx_2x(image):
+  
+  def helper_condition(v0, v1, v2, v3, v4, v5, v6):
+    return compare_pixels_exact(v0,v1) and (
+      not compare_pixels_exact(v2,v3) or
+      not compare_pixels_exact(v2,v4) or
+      not compare_pixels_exact(v0,v5) or
+      not compare_pixels_exact(v1,v6) )
+
+  def func(pixels, coords):
+    a = pixels[-1][-1]
+    b = pixels[0][-1]
+    c = pixels[1][-1]
+    d = pixels[-1][0]
+    e = pixels[0][0]
+    f = pixels[1][0]
+    g = pixels[-1][1]
+    h = pixels[0][1]
+    i = pixels[1][1]
+
+    p0 = e
+    p1 = e
+    p2 = e
+    p3 = e
+
+    if not compare_pixels_exact(d,f) and not compare_pixels_exact(b,h) and (
+      compare_pixels_exact(e,d) or
+      compare_pixels_exact(e,h) or
+      compare_pixels_exact(e,f) or
+      compare_pixels_exact(e,b) or (
+        ( not compare_pixels_exact(a,i) or compare_pixels_exact(e,g) or compare_pixels_exact(d,c) ) and
+        ( not compare_pixels_exact(g,c) or compare_pixels_exact(e,a) or compare_pixels_exact(e,i) )
+        )
+      ):
+
+      if helper_condition(b,d,e,a,i,c,g):
+        p0 = mix_pixels([b,d])
+
+      if helper_condition(f,b,e,c,g,i,a):
+        p1 = mix_pixels([f,b])
+
+      if helper_condition(d,h,e,g,c,a,i):
+        p2 = mix_pixels([d,h])
+
+      if helper_condition(h,f,e,i,a,g,c):
+        p3 = mix_pixels([h,f])
+
+    return ( (p0, p1), (p2, p3) )
+
+  return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
 
 # https://news.ycombinator.com/item?id=7925671
 # http://pastebin.com/raw/DsNupdbc
@@ -306,6 +412,8 @@ def hq_2x(image):
 
     return result
 
+#----------------------------------------------------------------------------
+
   def func(pixels, coords):
     a = pixels[-1][-1]
     b = pixels[0][-1]
@@ -340,7 +448,7 @@ def hq_2x(image):
 
   return upscale_n_times(image,2,func,1)
 
-#---------------------------------------
+#============================================================================
 
 image = Image.open("test.png")
 
@@ -349,6 +457,9 @@ linear_2x(image).save("linear.png","PNG")
 lines_2x(image).save("lines.png","PNG")
 eagle_2x(image).save("eagle.png","PNG")
 eagle_3x(image).save("eagle3.png","PNG")
+eagle_3xb(image).save("eagle3b.png","PNG")
 scale_2x(image).save("scale_2x.png","PNG")
 scale_3x(image).save("scale_3x.png","PNG")
 hq_2x(image).save("hq2x.png","PNG")
+epx_2x(image).save("epx.png","PNG")
+
