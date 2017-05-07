@@ -1,5 +1,10 @@
 from PIL import Image
 
+# Implementation of various upscaling pixel art filters - slow, just for
+# comparison, not real-time use. Only PIL is required.
+#
+# Miloslav Ciz 2017, WTFPL license
+#
 # implementation of many filters can be found at:
 #
 # https://code.google.com/archive/p/2dimagefilter/downloads?page=1
@@ -26,6 +31,28 @@ def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.2, thresh_u = 0.5, thresh_v 
   pixel1_yuv = rgb_to_yuv(pixel1)
   pixel2_yuv = rgb_to_yuv(pixel2)
   return 1 if abs(pixel1_yuv[0] - pixel2_yuv[0]) < thresh_y and abs(pixel1_yuv[1] - pixel2_yuv[1]) < thresh_u and abs(pixel1_yuv[2] - pixel2_yuv[2]) < thresh_v else 0
+
+def pixelwise_combine(images, combine_function):
+  width, height = images[0].size
+
+  result = Image.new("RGB",(width,height),"white")
+  result_pixels = result.load()  
+
+  pixels = []
+  
+  for image in images:
+    pixels.append(image.load())
+
+  for y in range(height):
+    for x in range(width):
+      pixel_values = []
+
+      for pixel_array in pixels:
+        pixel_values.append(pixel_array[(x,y)])
+
+      result_pixels[(x,y)] = combine_function(pixel_values)
+
+  return result
 
 def add_pixels(pixel_list):
   result = [0,0,0]
@@ -84,6 +111,11 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
 
 #============================================================================
 
+def average_image(images):
+  return pixelwise_combine(images,mix_pixels)
+
+#============================================================================
+
 def nearest_neighbour_2x(image):
   def func(pixels, coords):
     return (
@@ -92,6 +124,18 @@ def nearest_neighbour_2x(image):
       )
 
   return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
+
+def nearest_neighbour_3x(image):
+  def func(pixels, coords):
+    return (
+      (pixels[0][0], pixels[0][0], pixels[0][0]),
+      (pixels[0][0], pixels[0][0], pixels[0][0]),
+      (pixels[0][0], pixels[0][0], pixels[0][0])
+      )
+
+  return upscale_n_times(image,3,func,1)
 
 #----------------------------------------------------------------------------
 
@@ -108,6 +152,51 @@ def linear_2x(image):
       )
 
   return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
+
+def linear_3x(image):
+  def func(pixels, coords):
+    a = pixels[-1][-1]
+    b = pixels[0][-1]
+    c = pixels[1][-1]
+    d = pixels[-1][0]
+    e = pixels[0][0]
+    f = pixels[1][0]
+    g = pixels[-1][1]
+    h = pixels[0][1]
+    i = pixels[1][1]
+
+    abb = mix_pixels([a,b,b])
+    bbc = mix_pixels([b,b,c])
+
+    ghh = mix_pixels([g,h,h])
+    hhi = mix_pixels([h,h,i])
+
+    bee = mix_pixels([b,e,e])
+    dee = mix_pixels([d,e,e])
+    eef = mix_pixels([e,e,f])
+    eeh = mix_pixels([e,e,h])
+
+    return (
+        (
+          mix_pixels([abb,dee,dee]),
+          bee,
+          mix_pixels([bbc,eef,eef])
+        ),
+        (
+          dee,
+          e,
+          eef
+        ),
+        (
+          mix_pixels([dee,dee,ghh]),
+          eeh,
+          mix_pixels([eef,eef,hhi])
+        )
+      )
+
+  return upscale_n_times(image,3,func,1)
 
 #----------------------------------------------------------------------------
 
@@ -452,14 +541,38 @@ def hq_2x(image):
 
 image = Image.open("test.png")
 
-nearest_neighbour_2x(image).save("nearest.png","PNG")
-linear_2x(image).save("linear.png","PNG")
-lines_2x(image).save("lines.png","PNG")
-eagle_2x(image).save("eagle.png","PNG")
-eagle_3x(image).save("eagle3.png","PNG")
-eagle_3xb(image).save("eagle3b.png","PNG")
-scale_2x(image).save("scale_2x.png","PNG")
-scale_3x(image).save("scale_3x.png","PNG")
-hq_2x(image).save("hq2x.png","PNG")
-epx_2x(image).save("epx.png","PNG")
+# basic algorithms:
+
+result_nn_2x       = nearest_neighbour_2x(image)
+result_linear_2x   = linear_2x(image)
+result_lines_2x    = lines_2x(image)
+result_eagle_2x    = eagle_2x(image)
+result_scale_2x    = scale_2x(image)
+result_hq_2x       = hq_2x(image)
+result_epx_2x      = epx_2x(image)
+
+result_nn_3x       = nearest_neighbour_3x(image)
+result_linear_3x   = linear_3x(image)
+result_eagle_3x    = eagle_3x(image)
+result_eagle_3xb   = eagle_3xb(image)
+result_scale_3x    = scale_3x(image)
+
+# combines:
+result_avg_eagle_scale_hq_epx_2x = average_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
+
+# save the results:
+result_nn_2x.save("nearest_2x.png","PNG")
+result_nn_3x.save("nearest_3x.png","PNG")
+result_linear_2x.save("linear_2x.png","PNG")
+result_linear_3x.save("linear_3x.png","PNG")
+result_lines_2x.save("lines_2x.png","PNG")
+result_eagle_2x.save("eagle_2x.png","PNG")
+result_eagle_3x.save("eagle_3x.png","PNG")
+result_eagle_3xb.save("eagle_3xb.png","PNG")
+result_scale_2x.save("scale_2x.png","PNG")
+result_scale_3x.save("scale_3x.png","PNG")
+result_hq_2x.save("hq_2x.png","PNG")
+result_epx_2x.save("epx_2x.png","PNG")
+
+result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx","PNG")
 
