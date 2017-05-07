@@ -17,21 +17,25 @@ import random
 #
 #=======================================================================
 
-# helper functions:
-
 # https://en.wikipedia.org/wiki/YUV
 
 def rgb_to_yuv(pixel_rgb):
   y = 0.299 * pixel_rgb[0] + 0.587 * pixel_rgb[1] + 0.114 * pixel_rgb[2]
   return (y, 0.492 * (pixel_rgb[2] - y), 0.877 * (pixel_rgb[0] - y))
 
+#----------------------------------------------------------------------------
+
 def compare_pixels_exact(pixel1, pixel2):
   return pixel1[0] == pixel2[0] and pixel1[1] == pixel2[1] and pixel1[2] == pixel2[2]
+
+#----------------------------------------------------------------------------
 
 def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.2, thresh_u = 0.5, thresh_v = 0.5):
   pixel1_yuv = rgb_to_yuv(pixel1)
   pixel2_yuv = rgb_to_yuv(pixel2)
   return 1 if abs(pixel1_yuv[0] - pixel2_yuv[0]) < thresh_y and abs(pixel1_yuv[1] - pixel2_yuv[1]) < thresh_u and abs(pixel1_yuv[2] - pixel2_yuv[2]) < thresh_v else 0
+
+#----------------------------------------------------------------------------
 
 def pixelwise_combine(images, combine_function):
   width, height = images[0].size
@@ -55,6 +59,8 @@ def pixelwise_combine(images, combine_function):
 
   return result
 
+#----------------------------------------------------------------------------
+
 def add_pixels(pixel_list):
   result = [0,0,0]
 
@@ -64,8 +70,12 @@ def add_pixels(pixel_list):
 
   return tuple(result)
 
+#----------------------------------------------------------------------------
+
 def divide_pixel(pixel, value):
   return (pixel[0] / value,pixel[1] / value,pixel[2] / value)
+
+#----------------------------------------------------------------------------
 
 def mix_pixels(pixel_list):
   result = [0,0,0]
@@ -78,6 +88,8 @@ def mix_pixels(pixel_list):
     result[i] /= len(pixel_list)
 
   return tuple(result)
+
+#----------------------------------------------------------------------------
 
 def upscale_n_times(image, n, upscale_function, neighbour_size):
   def saturate(value, limit_from, limit_to):
@@ -109,6 +121,11 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
           result_pixels[(n * x + i,n * y + j)] = new_pixels[j][i]
 
   return result
+
+#----------------------------------------------------------------------------
+
+def neighbour_pixels_to_letters(pixels):
+  return ( pixels[-1][-1], pixels[0][-1], pixels[1][-1], pixels[-1][0], pixels[0][0], pixels[1][0], pixels[-1][1], pixels[0][1], pixels[1][1] )
 
 #============================================================================
 
@@ -166,15 +183,7 @@ def linear_2x(image):
 
 def linear_3x(image):
   def func(pixels, coords):
-    a = pixels[-1][-1]
-    b = pixels[0][-1]
-    c = pixels[1][-1]
-    d = pixels[-1][0]
-    e = pixels[0][0]
-    f = pixels[1][0]
-    g = pixels[-1][1]
-    h = pixels[0][1]
-    i = pixels[1][1]
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
     abb = mix_pixels([a,b,b])
     bbc = mix_pixels([b,b,c])
@@ -305,15 +314,7 @@ def eagle_2x(image):
 
 def eagle_3x(image):
   def func(pixels, coords):
-    a = pixels[-1][-1]
-    b = pixels[0][-1]
-    c = pixels[1][-1]
-    d = pixels[-1][0]
-    e = pixels[0][0]
-    f = pixels[1][0]
-    g = pixels[-1][1]
-    h = pixels[0][1]
-    i = pixels[1][1]
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
     return (
         (
@@ -344,15 +345,7 @@ def eagle_3x(image):
 
 def eagle_3xb(image):
   def func(pixels, coords):
-    a = pixels[-1][-1]
-    b = pixels[0][-1]
-    c = pixels[1][-1]
-    d = pixels[-1][0]
-    e = pixels[0][0]
-    f = pixels[1][0]
-    g = pixels[-1][1]
-    h = pixels[0][1]
-    i = pixels[1][1]
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
     return (
         (
@@ -388,15 +381,7 @@ def epx_2x(image):
       not compare_pixels_exact(v1,v6) )
 
   def func(pixels, coords):
-    a = pixels[-1][-1]
-    b = pixels[0][-1]
-    c = pixels[1][-1]
-    d = pixels[-1][0]
-    e = pixels[0][0]
-    f = pixels[1][0]
-    g = pixels[-1][1]
-    h = pixels[0][1]
-    i = pixels[1][1]
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
     p0 = e
     p1 = e
@@ -511,15 +496,7 @@ def hq_2x(image):
     return result
 
   def func(pixels, coords):
-    a = pixels[-1][-1]
-    b = pixels[0][-1]
-    c = pixels[1][-1]
-    d = pixels[-1][0]
-    e = pixels[0][0]
-    f = pixels[1][0]
-    g = pixels[-1][1]
-    h = pixels[0][1]
-    i = pixels[1][1]
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
     pattern = (
       not compare_pixels_yuv(e,i),
@@ -544,45 +521,64 @@ def hq_2x(image):
 
   return upscale_n_times(image,2,func,1)
 
+#----------------------------------------------------------------------------
+
+def experiment_a_3x(image):
+
+  def func(pixels, coords):
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
+
+    return (
+        (
+          b if compare_pixels_exact(b,d) else e,
+          e,
+          e if compare_pixels_exact(e,f) or compare_pixels_exact(e,b) else c
+        ),
+        (
+          e,
+          e,
+          e
+        ),
+        (
+          e,
+          e,
+          f if compare_pixels_exact(f,h) else e
+        )
+      )
+
+  return upscale_n_times(image,3,func,1)
+
 #============================================================================
 
+def do_upscale(what, save_as_filename):
+  print("computing " + save_as_filename)
+  what.save(save_as_filename + ".png","PNG")
+  return what
+  
 image = Image.open("test.png")
 random.seed(0)
 
 # basic algorithms:
 
-result_nn_2x       = nearest_neighbour_2x(image)
-result_linear_2x   = linear_2x(image)
-result_lines_2x    = lines_2x(image)
-result_eagle_2x    = eagle_2x(image)
-result_scale_2x    = scale_2x(image)
-result_hq_2x       = hq_2x(image)
-result_epx_2x      = epx_2x(image)
+result_nn_2x       = do_upscale(nearest_neighbour_2x(image),"2x nearest neighbour")
+result_linear_2x   = do_upscale(linear_2x(image),"2x linear")
+result_lines_2x    = do_upscale(lines_2x(image),"2x lines")
+result_eagle_2x    = do_upscale(eagle_2x(image),"2x eagle")
+result_scale_2x    = do_upscale(scale_2x(image),"2x scale")
+result_hq_2x       = do_upscale(hq_2x(image),"2x hq")
+result_epx_2x      = do_upscale(epx_2x(image),"2x epx")
 
-result_nn_3x       = nearest_neighbour_3x(image)
-result_linear_3x   = linear_3x(image)
-result_eagle_3x    = eagle_3x(image)
-result_eagle_3xb   = eagle_3xb(image)
-result_scale_3x    = scale_3x(image)
+result_nn_3x       = do_upscale(nearest_neighbour_3x(image),"3x nearest neighbour")
+result_linear_3x   = do_upscale(linear_3x(image),"3x linear")
+result_eagle_3x    = do_upscale(eagle_3x(image),"3x eagle")
+result_eagle_3xb   = do_upscale(eagle_3xb(image),"3x eagle b")
+result_scale_3x    = do_upscale(scale_3x(image),"3x scale")
+
+result_exp_a       = do_upscale(experiment_a_3x(image),"3x experimental a")
 
 # combines:
 result_avg_eagle_scale_hq_epx_2x = average_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
+result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_avg.png","PNG")
+
 result_rnd_eagle_scale_hq_epx_2x = random_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
-
-# save the results:
-result_nn_2x.save("nearest_2x.png","PNG")
-result_nn_3x.save("nearest_3x.png","PNG")
-result_linear_2x.save("linear_2x.png","PNG")
-result_linear_3x.save("linear_3x.png","PNG")
-result_lines_2x.save("lines_2x.png","PNG")
-result_eagle_2x.save("eagle_2x.png","PNG")
-result_eagle_3x.save("eagle_3x.png","PNG")
-result_eagle_3xb.save("eagle_3xb.png","PNG")
-result_scale_2x.save("scale_2x.png","PNG")
-result_scale_3x.save("scale_3x.png","PNG")
-result_hq_2x.save("hq_2x.png","PNG")
-result_epx_2x.save("epx_2x.png","PNG")
-
-result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_avg","PNG")
-result_rnd_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_rnd","PNG")
-
+result_rnd_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_rnd.png","PNG")
