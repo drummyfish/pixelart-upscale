@@ -20,6 +20,8 @@ import random
 # https://en.wikipedia.org/wiki/YUV
 
 def rgb_to_yuv(pixel_rgb):
+  pixel_rgb = (pixel_rgb[0] / float(255.0),pixel_rgb[1] / float(255.0),pixel_rgb[2] / float(255.0) )
+
   y = 0.299 * pixel_rgb[0] + 0.587 * pixel_rgb[1] + 0.114 * pixel_rgb[2]
   return (y, 0.492 * (pixel_rgb[2] - y), 0.877 * (pixel_rgb[0] - y))
 
@@ -30,7 +32,7 @@ def compare_pixels_exact(pixel1, pixel2):
 
 #----------------------------------------------------------------------------
 
-def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.2, thresh_u = 0.5, thresh_v = 0.5):
+def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.2, thresh_u = 0.2, thresh_v = 0.2):
   pixel1_yuv = rgb_to_yuv(pixel1)
   pixel2_yuv = rgb_to_yuv(pixel2)
   return 1 if abs(pixel1_yuv[0] - pixel2_yuv[0]) < thresh_y and abs(pixel1_yuv[1] - pixel2_yuv[1]) < thresh_u and abs(pixel1_yuv[2] - pixel2_yuv[2]) < thresh_v else 0
@@ -91,9 +93,26 @@ def mix_pixels(pixel_list):
 
 #----------------------------------------------------------------------------
 
+def saturate(value, limit_from, limit_to):
+  return min(max(limit_from,value),limit_to)
+
+#----------------------------------------------------------------------------
+
+def get_pixel_neighbours(image_pixels, width, height, x, y, neighbour_size):
+  neighbourhood = []
+  neighbour_indices = [i for i in range(neighbour_size + 1)] + [i for i in range(-1 * neighbour_size - 1,0)]
+
+  for i in neighbour_indices:
+    neighbourhood.append([])
+
+    for j in neighbour_indices:
+      neighbourhood[-1].append(image_pixels[(saturate(x + i,0,width - 1),saturate(y + j,0,height - 1))])
+
+  return neighbourhood
+
+#----------------------------------------------------------------------------
+
 def upscale_n_times(image, n, upscale_function, neighbour_size):
-  def saturate(value, limit_from, limit_to):
-    return min(max(limit_from,value),limit_to)
 
   image = image.convert("RGB")
   width, height = image.size
@@ -105,15 +124,7 @@ def upscale_n_times(image, n, upscale_function, neighbour_size):
 
   for y in range(height):
     for x in range(width):
-      neighbourhood = []
-      neighbour_indices = [i for i in range(neighbour_size + 1)] + [i for i in range(-1 * neighbour_size - 1,0)]
-
-      for i in neighbour_indices:
-        neighbourhood.append([])
-
-        for j in neighbour_indices:
-          neighbourhood[-1].append(source_pixels[(saturate(x + i,0,width - 1),saturate(y + j,0,height - 1))])
-
+      neighbourhood = get_pixel_neighbours(source_pixels, width, height, x, y, neighbour_size)
       new_pixels = upscale_function(neighbourhood,(x,y))
 
       for i in range(n):
