@@ -1,5 +1,6 @@
 from PIL import Image
 import random
+import math
 
 # Implementation of various upscaling pixel art filters - slow, just for
 # comparison, not real-time use. Only PIL is required.
@@ -559,6 +560,257 @@ def experiment_a_3x(image):
 
   return upscale_n_times(image,3,func,1)
 
+#----------------------------------------------------------------------------
+
+def experiment_b(image):
+  def pattern_size(pattern):
+    return int(math.sqrt(len(pattern)))
+
+  def rotate_pattern(pattern):
+    new_pattern = []
+
+    p_size = pattern_size(pattern)
+
+    for j in range(p_size):
+      for i in range(p_size):
+        new_pattern.append(pattern[j + (p_size - i - 1) * p_size])
+
+    return tuple(new_pattern)
+
+  def compare_with_pattern(neighbourhood, pattern):
+    main_pixel = None
+
+    for pass_no in (0,1):
+      i = 0
+
+      for y in (-1,0,1):
+        for x in (-1,0,1):
+
+          if pass_no == 0:             # check equality of main pixels
+            if pattern[i] == 1:
+              if main_pixel == None:
+                main_pixel = neighbourhood[x][y]
+              elif not compare_pixels_exact(main_pixel,neighbourhood[x][y]):
+                return None
+          else:                        # check inequalities to main pixels
+            if pattern[i] == 2 and compare_pixels_exact(main_pixel,neighbourhood[x][y]):
+                return None
+          
+          i += 1
+
+    return main_pixel
+
+  def put_pattern(image_pixels, width, height, x, y, pattern, pixel, neighbouthood):
+    i = 0
+
+    p_size = pattern_size(pattern)
+    p_half_size = p_size / 2
+
+    for y2 in range(p_size):
+      for x2 in range(p_size):
+        if pattern[i] == 1:
+          dst_x = saturate(x + x2 - p_half_size,0,width - 1)
+          dst_y = saturate(y + y2 - p_half_size,0,height - 1)
+
+          image_pixels[(dst_x,dst_y)] = pixel
+      
+        i += 1
+
+
+  pattern_a = (            # diagonal line
+    1, 2, 2,
+    2, 1, 2,
+    2, 2, 1
+    )
+
+  pattern_a2 = (
+    1, 2, 2, 2, 2, 2,
+    2, 1, 2, 2, 2, 2,
+    2, 2, 1, 2, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 2, 1, 2,
+    2, 2, 2, 2, 2, 1
+    )
+
+
+  pattern_b = (            # straight line
+    2, 1, 2,
+    2, 1, 2,
+    2, 1, 2
+    )
+
+  pattern_b2 = (
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2
+    )
+
+  pattern_c = (             # dot
+    2, 2, 2,
+    2, 1, 2,
+    2, 2, 2
+    )
+
+  pattern_c2 = (
+    2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2
+    )
+
+
+  pattern_d = (           # cross
+    2, 1, 2,
+    1, 1, 1,
+    2, 1, 2
+    )
+
+  pattern_d2 = (
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    1, 1, 1, 1, 1, 1,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2
+    )
+
+
+  pattern_e = (           # corner
+    0, 1, 1,
+    1, 2, 2,
+    1, 2, 0
+    )
+
+  pattern_e2 = (
+    1, 1, 1, 1, 1, 1,
+    1, 2, 2, 2, 2, 2,
+    1, 2, 2, 2, 2, 2,
+    1, 2, 2, 2, 2, 2,
+    1, 2, 2, 2, 2, 2,
+    1, 2, 2, 2, 2, 2
+    )
+
+
+  pattern_f = (          # dither
+    1, 2, 1,
+    2, 1, 2,
+    1, 2, 1
+    )
+
+  pattern_f2 = (
+    1, 2, 1, 2, 1, 2,
+    2, 1, 2, 1, 2, 1,
+    1, 2, 1, 2, 1, 2,
+    2, 1, 2, 1, 2, 1,
+    1, 2, 1, 2, 1, 2,
+    2, 1, 2, 1, 2, 1
+    )
+
+  pattern_g = (         # weird line
+    2, 1, 2,
+    2, 1, 2,
+    1, 2, 0
+    )
+
+  pattern_g2 = (
+    2, 2, 2, 2, 1, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 1, 2, 2, 2,
+    2, 2, 1, 2, 2, 2,
+    2, 1, 2, 2, 2, 2
+    )
+
+  pattern_gb = (         # weird line flipped
+    2, 1, 2,
+    2, 1, 2,
+    0, 2, 1
+    )
+
+  pattern_gb2 = (
+    2, 1, 2, 2, 2, 2,
+    2, 2, 1, 2, 2, 2,
+    2, 2, 1, 2, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 1, 2, 2,
+    2, 2, 2, 2, 1, 2
+    )
+
+
+  patterns = [
+    (pattern_a, pattern_a2),
+    (pattern_b, pattern_b2),
+    (rotate_pattern(pattern_a), rotate_pattern(pattern_a2)),
+    (rotate_pattern(pattern_b), rotate_pattern(pattern_b2)),
+    (pattern_c, pattern_c2),
+    (pattern_d, pattern_d2),
+    (pattern_e, pattern_e2),
+    (rotate_pattern(pattern_e), rotate_pattern(pattern_e2)),
+
+
+    ( rotate_pattern(rotate_pattern(pattern_e)), rotate_pattern(rotate_pattern(pattern_e2)) ),
+    ( rotate_pattern(rotate_pattern(rotate_pattern(pattern_e))), rotate_pattern(rotate_pattern(rotate_pattern(pattern_e2))) ),
+
+
+    (pattern_f, pattern_f2),
+
+    (pattern_g, pattern_g2),
+    ( rotate_pattern(pattern_g), rotate_pattern(pattern_g2) ),
+
+    (pattern_gb, pattern_gb2),
+    ( rotate_pattern(pattern_gb), rotate_pattern(pattern_gb2) )
+    ]
+
+  width, height = image.size
+  source_pixels = image.load()
+
+  result = Image.new("RGB",(2 * width,2 * height),"white")
+  result_pixels = result.load()
+
+
+
+
+
+
+
+
+
+
+
+  for y in range(height):
+    for x in range(width):
+      neighbours = get_pixel_neighbours(source_pixels, width, height, x, y, 1)
+      
+      matched = False
+
+      for pattern in patterns:
+
+        comparison = compare_with_pattern(neighbours,pattern[0])
+
+        if comparison != None:
+          put_pattern(result_pixels, 2 * width, 2 * height, 2 * x, 2 * y, pattern[1], comparison, neighbours)
+          matched = True
+          break
+      
+
+
+
+  return result
+
+
+
+
+
+
+
+
+
+
 #============================================================================
 
 def do_upscale(what, save_as_filename):
@@ -569,8 +821,11 @@ def do_upscale(what, save_as_filename):
 image = Image.open("test.png")
 random.seed(0)
 
+do_upscale(experiment_b(image),"2x experiment b")
+
 # basic algorithms:
 
+"""
 result_nn_2x       = do_upscale(nearest_neighbour_2x(image),"2x nearest neighbour")
 result_linear_2x   = do_upscale(linear_2x(image),"2x linear")
 result_lines_2x    = do_upscale(lines_2x(image),"2x lines")
@@ -593,3 +848,4 @@ result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_avg.png","PNG")
 
 result_rnd_eagle_scale_hq_epx_2x = random_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
 result_rnd_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_rnd.png","PNG")
+"""
