@@ -4,7 +4,7 @@ import math
 
 NS = 9              # neighbour size
 N_MAX = NS * NS - 1 # maximum pixel number in the neighbourhood
-
+MAX_CONDITIONS = 100
 
 class NeighbourhoodCondition(object):
 
@@ -22,7 +22,7 @@ class ConditionReference(NeighbourhoodCondition):     # reference to a separate 
     self.operands = [condition_index]
 
   def to_python_code(self):
-    return "c[" + str(self.operands[0]) + "]"
+    return "c" + str(self.operands[0])
 
 class ConditionAnd(NeighbourhoodCondition):
 
@@ -111,10 +111,47 @@ class UpscaleAlgorithm:
   def __init__(self):
 
     self.conditions = []
-    self.pixel00_output = []
-    self.pixel01_output = []
-    self.pixel02_output = []
-    self.pixel03_output = []
+    self.pixel0_output = []     # nonempty list of tuples in format (condition_index, pixel number), last condition is ignored
+    self.pixel1_output = []
+    self.pixel2_output = []
+    self.pixel3_output = []
+
+  def to_python_code(self):
+    result = ""
+
+    i = 0
+
+    for condition in self.conditions:
+      result += "c" + str(i) + " = " + condition.to_python_code() + "\n"
+      i += 1
+
+    r = 0
+
+    for if_statement in (self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output):
+      result += "\n"
+
+      for i in range(len(if_statement)):
+
+        if i == len(if_statement) - 1:
+          result += "else:\n"
+        else:
+          if i == 0:
+            result += "if c" + str(if_statement[i][0]) + ":\n"
+          else:
+            result += "elif c" + str(if_statement[i][0]) + ":\n"
+          
+        result += "  r" + str(r) + " = p[" + str(if_statement[i][1]) + "] \n"
+
+      r += 1
+
+    return result
+
+  def delete_condition(self, index):
+    pass
+
+  def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
+    pass
+
 
 class RandomGenerator(object):
  
@@ -154,8 +191,39 @@ class RandomGenerator(object):
     else:
       return ConditionReference( random.randint(0,condition_index - 1) )
 
+  def generateRandomAlgorithm(self):
+    result = UpscaleAlgorithm()
 
-r = RandomGenerator(1001)
+    def random_switch_statement(alg):
+      res = []
 
-for i in range(20):
-  print(r.generateRandomCondition(3).to_python_code())
+      indices = range(len(alg.conditions))
+      random.shuffle(indices)
+
+      for i in indices:
+        res.append( (i,random.randint(0,N_MAX)) )
+
+        if random.randint(0,2) == 0:
+          break
+
+      return res
+
+    for i in range(MAX_CONDITIONS):
+      result.conditions.append(self.generateRandomCondition(i))
+
+      if random.randint(0,5) == 0:
+        break
+
+    result.pixel0_output = random_switch_statement(result)
+    result.pixel1_output = random_switch_statement(result)
+    result.pixel2_output = random_switch_statement(result)
+    result.pixel3_output = random_switch_statement(result)
+
+    result.normalize()
+
+    return result
+
+
+r = RandomGenerator(50)
+
+print(r.generateRandomAlgorithm().to_python_code())
