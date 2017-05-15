@@ -33,7 +33,7 @@ def compare_pixels_exact(pixel1, pixel2):
 
 #----------------------------------------------------------------------------
 
-def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.25, thresh_u = 0.25, thresh_v = 0.25):
+def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.20, thresh_u = 0.20, thresh_v = 0.20):
   pixel1_yuv = rgb_to_yuv(pixel1)
   pixel2_yuv = rgb_to_yuv(pixel2)
   return 1 if abs(pixel1_yuv[0] - pixel2_yuv[0]) < thresh_y and abs(pixel1_yuv[1] - pixel2_yuv[1]) < thresh_u and abs(pixel1_yuv[2] - pixel2_yuv[2]) < thresh_v else 0
@@ -852,6 +852,20 @@ def experiment_b(image):
 # decision tree has yet to be optimised.
 
 def experiment_c(image):
+
+  def handle_straight_line(p0,p1,p2,p3):
+    if pixel_is_brighter(p2,p0):
+      return mix_pixels([p2,p3])
+    else:
+      return mix_pixels([p0,p1])
+
+    """
+    if compare_pixels_yuv(p2,p3) and pixel_is_brighter(p2,p0):
+      return mix_pixels([p2,p3])
+    else:
+      return mix_pixels([p0,p1])
+    """
+
   def func(pixels, coords):
     a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
@@ -878,28 +892,13 @@ def experiment_c(image):
       p3 = mix_pixels([b,d])
 
     elif ab:   # horizontal line 1?
-      if de and pixel_is_brighter(d,a):
-        p3 = mix_pixels([d,e])
-      else:
-        p3 = mix_pixels([a,b])
-
+      p3 = handle_straight_line(a,b,d,e)
     elif de:   # horizontal line 2?
-      if ab and pixel_is_brighter(a,d):
-        p3 = mix_pixels([a,b])
-      else:
-        p3 = mix_pixels([d,e])
-
+      p3 = handle_straight_line(d,e,a,b)
     elif ad:   # vertical line 1?
-      if be and pixel_is_brighter(b,a):
-        p3 = mix_pixels([b,e])
-      else:
-        p3 = mix_pixels([a,d])
-
+      p3 = handle_straight_line(a,d,b,e)
     elif be:   # vertical line 2?
-      if ad and pixel_is_brighter(a,b):
-        p3 = mix_pixels([a,d])
-      else:
-        p3 = mix_pixels([b,e])
+      p3 = handle_straight_line(b,e,a,d)
 
     elif ad and de and not ab:                        # weird corner 1
       p3 = mix_pixels([a,d,e])
@@ -926,7 +925,7 @@ def do_upscale(what, save_as_filename):
   what.save(save_as_filename + ".png","PNG")
   return what
   
-image = Image.open("test_training.png")
+image = Image.open("test.png")
 random.seed(0)
 
 """
@@ -937,6 +936,7 @@ bbb.save("experiment b.png","PNG")
 """
 
 rrr = do_upscale(experiment_c(image),"experiment c")
+rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
 
 """
 # basic algorithms:
