@@ -33,10 +33,20 @@ def compare_pixels_exact(pixel1, pixel2):
 
 #----------------------------------------------------------------------------
 
-def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.2, thresh_u = 0.2, thresh_v = 0.2):
+def compare_pixels_yuv(pixel1, pixel2, thresh_y = 0.25, thresh_u = 0.25, thresh_v = 0.25):
   pixel1_yuv = rgb_to_yuv(pixel1)
   pixel2_yuv = rgb_to_yuv(pixel2)
   return 1 if abs(pixel1_yuv[0] - pixel2_yuv[0]) < thresh_y and abs(pixel1_yuv[1] - pixel2_yuv[1]) < thresh_u and abs(pixel1_yuv[2] - pixel2_yuv[2]) < thresh_v else 0
+
+#----------------------------------------------------------------------------
+
+def pixel_brightness(pixel):
+  return int( 255.0 * (0.21 * pixel[0] / 255.0 + 0.72 * pixel[1] / 255.0 + 0.07 * pixel[2] / 255.0))
+
+#----------------------------------------------------------------------------
+
+def pixel_is_brighter(pixel1, pixel2):
+  return pixel_brightness(pixel1) > pixel_brightness(pixel2)
 
 #----------------------------------------------------------------------------
 
@@ -577,8 +587,9 @@ def experiment_b(image):
 
     return tuple(new_pattern)
 
-  def compare_with_pattern(neighbourhood, pattern):
+  def compare_with_pattern(neighbourhood, pattern):   # return: (pixel, background_color)
     main_pixel = None
+    background_pixels = []
 
     for pass_no in (0,1):
       i = 0
@@ -594,13 +605,15 @@ def experiment_b(image):
                 return None
           else:                        # check inequalities to main pixels
             if pattern[i] == 2 and compare_pixels_exact(main_pixel,neighbourhood[x][y]):
-                return None
+              return None
+            else:
+              background_pixels.append(neighbourhood[x][y])
           
           i += 1
 
-    return main_pixel
+    return (main_pixel,mix_pixels(background_pixels))
 
-  def put_pattern(image_pixels, width, height, x, y, pattern, pixel, neighbouthood):
+  def put_pattern(image_pixels, width, height, x, y, pattern, pixel, background):
     i = 0
 
     p_size = pattern_size(pattern)
@@ -608,11 +621,13 @@ def experiment_b(image):
 
     for y2 in range(p_size):
       for x2 in range(p_size):
-        if pattern[i] == 1:
-          dst_x = saturate(x + x2 - p_half_size,0,width - 1)
-          dst_y = saturate(y + y2 - p_half_size,0,height - 1)
+        dst_x = saturate(x + x2 - p_half_size,0,width - 1)
+        dst_y = saturate(y + y2 - p_half_size,0,height - 1)
 
+        if pattern[i] == 1:
           image_pixels[(dst_x,dst_y)] = pixel
+        elif pattern[i] == 2:
+          image_pixels[(dst_x,dst_y)] = background
       
         i += 1
 
@@ -624,14 +639,16 @@ def experiment_b(image):
     )
 
   pattern_a2 = (
-    1, 2, 2, 2, 2, 2,
-    2, 1, 2, 2, 2, 2,
-    2, 2, 1, 2, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 2, 1, 2,
-    2, 2, 2, 2, 2, 1
+    0, 2, 2, 0, 0, 0, 0, 0, 0,
+    0, 1, 2, 2, 0, 0, 0, 0, 0,
+    0, 2, 1, 2, 2, 0, 0, 0, 0,
+    0, 2, 2, 1, 2, 2, 0, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 0, 2, 2, 1, 2, 2, 0,
+    0, 0, 0, 0, 2, 2, 1, 2, 0,
+    0, 0, 0, 0, 0, 2, 2, 1, 0,
+    0, 0, 0, 0, 0, 0, 2, 2, 0
     )
-
 
   pattern_b = (            # straight line
     2, 1, 2,
@@ -640,12 +657,15 @@ def experiment_b(image):
     )
 
   pattern_b2 = (
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0
     )
 
   pattern_c = (             # dot
@@ -655,12 +675,15 @@ def experiment_b(image):
     )
 
   pattern_c2 = (
-    2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 2, 2, 2, 0, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 2, 1, 1, 1, 2, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 0, 2, 2, 2, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 2, 2, 0, 0, 0, 0, 0, 0
     )
 
 
@@ -671,12 +694,15 @@ def experiment_b(image):
     )
 
   pattern_d2 = (
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    1, 1, 1, 1, 1, 1,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    2, 2, 2, 2, 1, 2, 2, 2, 2,
+    1, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 1, 2, 2, 2, 2,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0,
+    0, 0, 0, 2, 1, 2, 0, 0, 0
     )
 
 
@@ -687,12 +713,15 @@ def experiment_b(image):
     )
 
   pattern_e2 = (
-    1, 1, 1, 1, 1, 1,
-    1, 2, 2, 2, 2, 2,
-    1, 2, 2, 2, 2, 2,
-    1, 2, 2, 2, 2, 2,
-    1, 2, 2, 2, 2, 2,
-    1, 2, 2, 2, 2, 2
+    2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 1, 1, 1, 1, 1, 2, 2,
+    2, 1, 1, 2, 2, 2, 2, 2, 2,
+    2, 1, 2, 2, 0, 0, 0, 0, 0,
+    2, 1, 2, 0, 0, 0, 0, 0, 0,
+    2, 1, 2, 0, 0, 0, 0, 0, 0,
+    2, 1, 2, 0, 0, 0, 0, 0, 0,
+    2, 2, 2, 0, 0, 0, 0, 0, 0,
+    2, 2, 2, 0, 0, 0, 0, 0, 0,
     )
 
 
@@ -703,12 +732,15 @@ def experiment_b(image):
     )
 
   pattern_f2 = (
-    1, 2, 1, 2, 1, 2,
-    2, 1, 2, 1, 2, 1,
-    1, 2, 1, 2, 1, 2,
-    2, 1, 2, 1, 2, 1,
-    1, 2, 1, 2, 1, 2,
-    2, 1, 2, 1, 2, 1
+    1, 2, 1, 2, 1, 2, 1, 2, 1,
+    2, 1, 2, 1, 2, 1, 2, 1, 2,
+    1, 2, 1, 2, 1, 2, 1, 2, 1,
+    2, 1, 2, 1, 2, 1, 2, 1, 2,
+    1, 2, 1, 2, 1, 2, 1, 2, 1,
+    2, 1, 2, 1, 2, 1, 2, 1, 2,
+    1, 2, 1, 2, 1, 2, 1, 2, 1,
+    2, 1, 2, 1, 2, 1, 2, 1, 2,
+    1, 2, 1, 2, 1, 2, 1, 2, 1
     )
 
   pattern_g = (         # weird line
@@ -718,12 +750,15 @@ def experiment_b(image):
     )
 
   pattern_g2 = (
-    2, 2, 2, 2, 1, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 1, 2, 2, 2,
-    2, 2, 1, 2, 2, 2,
-    2, 1, 2, 2, 2, 2
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 2, 2, 1, 2, 2, 0, 0, 0,
+    2, 2, 1, 2, 2, 0, 0, 0, 0,
+    2, 1, 2, 2, 0, 0, 0, 0, 0,
+    2, 1, 2, 2, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0
     )
 
   pattern_gb = (         # weird line flipped
@@ -733,12 +768,15 @@ def experiment_b(image):
     )
 
   pattern_gb2 = (
-    2, 1, 2, 2, 2, 2,
-    2, 2, 1, 2, 2, 2,
-    2, 2, 1, 2, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 1, 2, 2,
-    2, 2, 2, 2, 1, 2
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 2, 2, 1, 2, 2, 0, 0,
+    0, 0, 0, 2, 2, 1, 2, 2, 0,
+    0, 0, 0, 0, 2, 2, 1, 2, 2,
+    0, 0, 0, 0, 0, 2, 2, 1, 2,
+    0, 0, 0, 0, 0, 2, 2, 1, 2,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0
     )
 
 
@@ -751,8 +789,6 @@ def experiment_b(image):
     (pattern_d, pattern_d2),
     (pattern_e, pattern_e2),
     (rotate_pattern(pattern_e), rotate_pattern(pattern_e2)),
-
-
     ( rotate_pattern(rotate_pattern(pattern_e)), rotate_pattern(rotate_pattern(pattern_e2)) ),
     ( rotate_pattern(rotate_pattern(rotate_pattern(pattern_e))), rotate_pattern(rotate_pattern(rotate_pattern(pattern_e2))) ),
 
@@ -763,13 +799,19 @@ def experiment_b(image):
     ( rotate_pattern(pattern_g), rotate_pattern(pattern_g2) ),
 
     (pattern_gb, pattern_gb2),
-    ( rotate_pattern(pattern_gb), rotate_pattern(pattern_gb2) )
+    ( rotate_pattern(pattern_gb), rotate_pattern(pattern_gb2) ),
     ]
 
   width, height = image.size
   source_pixels = image.load()
 
-  result = Image.new("RGB",(2 * width,2 * height),"white")
+
+  upscale_factor = 3
+
+  #result = Image.new("RGB",(upscale_factor * width,upscale_factor * height),"white")
+
+  result = linear_3x(image)
+
   result_pixels = result.load()
 
 
@@ -793,7 +835,7 @@ def experiment_b(image):
         comparison = compare_with_pattern(neighbours,pattern[0])
 
         if comparison != None:
-          put_pattern(result_pixels, 2 * width, 2 * height, 2 * x, 2 * y, pattern[1], comparison, neighbours)
+          put_pattern(result_pixels, upscale_factor * width, upscale_factor * height, upscale_factor * x, upscale_factor * y, pattern[1], comparison[0], comparison[1])
           matched = True
           break
       
@@ -804,10 +846,76 @@ def experiment_b(image):
 
 
 
+#----------------------------------------------------------------------------
 
+# My algorithm that tries to preserve thin lines depending on brightness, the
+# decision tree has yet to be optimised.
 
+def experiment_c(image):
+  def func(pixels, coords):
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
 
+    # a b c
+    # d e f
+    # g h i
 
+    p1 = mix_pixels([a,b]) if compare_pixels_yuv(a,b) else (a if pixel_is_brighter(a,b) else b)
+    p2 = mix_pixels([a,d]) if compare_pixels_yuv(a,d) else (a if pixel_is_brighter(a,d) else d)
+
+    ae = compare_pixels_yuv(a,e)
+    bd = compare_pixels_yuv(b,d)
+    ab = compare_pixels_yuv(a,b)
+    de = compare_pixels_yuv(d,e)
+    ad = compare_pixels_yuv(a,d)
+    be = compare_pixels_yuv(b,e)
+
+    if ae and bd and ab:                              # all pixels equal?
+      p3 = mix_pixels([a,b,d,e])
+
+    elif ae and (not bd or pixel_is_brighter(b,a)):   # diagonal line 1?
+      p3 = mix_pixels([a,e])
+    elif bd and (not ae or pixel_is_brighter(a,b)):   # diagonal line 2?
+      p3 = mix_pixels([b,d])
+
+    elif ab:   # horizontal line 1?
+      if de and pixel_is_brighter(d,a):
+        p3 = mix_pixels([d,e])
+      else:
+        p3 = mix_pixels([a,b])
+
+    elif de:   # horizontal line 2?
+      if ab and pixel_is_brighter(a,d):
+        p3 = mix_pixels([a,b])
+      else:
+        p3 = mix_pixels([d,e])
+
+    elif ad:   # vertical line 1?
+      if be and pixel_is_brighter(b,a):
+        p3 = mix_pixels([b,e])
+      else:
+        p3 = mix_pixels([a,d])
+
+    elif be:   # vertical line 2?
+      if ad and pixel_is_brighter(a,b):
+        p3 = mix_pixels([a,d])
+      else:
+        p3 = mix_pixels([b,e])
+
+    elif ad and de and not ab:                        # weird corner 1
+      p3 = mix_pixels([a,d,e])
+    elif be and de and not ab:                        # weird corner 2
+      p3 = mix_pixels([b,d,e])
+    elif ad and ab and not be:                        # weird corner 3
+      p3 = mix_pixels([a,b,d])
+    elif ab and be and not ad:                        # weird corner 4
+      p3 = mix_pixels([a,b,e])
+
+    else:
+      p3 = mix_pixels([a,b,d,e])
+
+    return ( (a,p1), (p2,p3) )
+
+  return upscale_n_times(image,2,func,1)
 
 
 
@@ -818,14 +926,21 @@ def do_upscale(what, save_as_filename):
   what.save(save_as_filename + ".png","PNG")
   return what
   
-image = Image.open("test.png")
+image = Image.open("test_training.png")
 random.seed(0)
 
-do_upscale(experiment_b(image),"2x experiment b")
+"""
+aaa = experiment_b(image)
+ccc = linear_3x(image)
+bbb = average_image([aaa])
+bbb.save("experiment b.png","PNG")
+"""
 
-# basic algorithms:
+rrr = do_upscale(experiment_c(image),"experiment c")
 
 """
+# basic algorithms:
+
 result_nn_2x       = do_upscale(nearest_neighbour_2x(image),"2x nearest neighbour")
 result_linear_2x   = do_upscale(linear_2x(image),"2x linear")
 result_lines_2x    = do_upscale(lines_2x(image),"2x lines")
