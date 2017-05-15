@@ -857,7 +857,7 @@ def experiment_c(image):
     if pixel_is_brighter(p1,p0):
       return mix_pixels([p1,p2,p3])
     else:
-      return p0
+      return mix_pixels([p0,p1,p2]) #p0
 
   def handle_straight_line(p0,p1,p2,p3):
     if pixel_is_brighter(p2,p0):
@@ -893,13 +893,13 @@ def experiment_c(image):
       p3 = mix_pixels([a,b,d,e])
 
     elif ad and de and not ab:                        # weird corner 1
-      p3 = handle_weird_corner(b,a,d,e) #mix_pixels([a,d,e])
+      p3 = handle_weird_corner(b,a,e,d) #mix_pixels([a,d,e])
     elif be and de and not ab:                        # weird corner 2
       p3 = handle_weird_corner(a,b,d,e) #mix_pixels([b,d,e])
     elif ad and ab and not be:                        # weird corner 3
-      p3 = handle_weird_corner(e,a,b,d) #mix_pixels([a,b,d])
+      p3 = handle_weird_corner(e,d,b,a) #mix_pixels([a,b,d])
     elif ab and be and not ad:                        # weird corner 4
-      p3 = handle_weird_corner(d,a,b,e) #mix_pixels([a,b,e])
+      p3 = handle_weird_corner(d,a,e,b) #mix_pixels([a,b,e])
 
     elif ae and (not bd or pixel_is_brighter(b,a)):   # diagonal line 1?
       p3 = mix_pixels([a,e])
@@ -933,7 +933,7 @@ def do_upscale(what, save_as_filename):
   what.save(save_as_filename + ".png","PNG")
   return what
   
-image = Image.open("test small.png")
+image = Image.open("test_training.png")
 random.seed(0)
 
 """
@@ -944,7 +944,7 @@ bbb.save("experiment b.png","PNG")
 """
 
 rrr = do_upscale(experiment_c(image),"experiment c")
-#rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
+rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
 
 """
 # basic algorithms:
