@@ -853,6 +853,12 @@ def experiment_b(image):
 
 def experiment_c(image):
 
+  def handle_weird_corner(p0,p1,p2,p3):
+    if pixel_is_brighter(p1,p0):
+      return mix_pixels([p1,p2,p3])
+    else:
+      return p0
+
   def handle_straight_line(p0,p1,p2,p3):
     if pixel_is_brighter(p2,p0):
       return mix_pixels([p2,p3])
@@ -886,6 +892,15 @@ def experiment_c(image):
     if ae and bd and ab:                              # all pixels equal?
       p3 = mix_pixels([a,b,d,e])
 
+    elif ad and de and not ab:                        # weird corner 1
+      p3 = handle_weird_corner(b,a,d,e) #mix_pixels([a,d,e])
+    elif be and de and not ab:                        # weird corner 2
+      p3 = handle_weird_corner(a,b,d,e) #mix_pixels([b,d,e])
+    elif ad and ab and not be:                        # weird corner 3
+      p3 = handle_weird_corner(e,a,b,d) #mix_pixels([a,b,d])
+    elif ab and be and not ad:                        # weird corner 4
+      p3 = handle_weird_corner(d,a,b,e) #mix_pixels([a,b,e])
+
     elif ae and (not bd or pixel_is_brighter(b,a)):   # diagonal line 1?
       p3 = mix_pixels([a,e])
     elif bd and (not ae or pixel_is_brighter(a,b)):   # diagonal line 2?
@@ -900,14 +915,7 @@ def experiment_c(image):
     elif be:   # vertical line 2?
       p3 = handle_straight_line(b,e,a,d)
 
-    elif ad and de and not ab:                        # weird corner 1
-      p3 = mix_pixels([a,d,e])
-    elif be and de and not ab:                        # weird corner 2
-      p3 = mix_pixels([b,d,e])
-    elif ad and ab and not be:                        # weird corner 3
-      p3 = mix_pixels([a,b,d])
-    elif ab and be and not ad:                        # weird corner 4
-      p3 = mix_pixels([a,b,e])
+
 
     else:
       p3 = mix_pixels([a,b,d,e])
@@ -925,7 +933,7 @@ def do_upscale(what, save_as_filename):
   what.save(save_as_filename + ".png","PNG")
   return what
   
-image = Image.open("test.png")
+image = Image.open("test small.png")
 random.seed(0)
 
 """
@@ -936,11 +944,10 @@ bbb.save("experiment b.png","PNG")
 """
 
 rrr = do_upscale(experiment_c(image),"experiment c")
-rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
+#rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
 
 """
 # basic algorithms:
-
 result_nn_2x       = do_upscale(nearest_neighbour_2x(image),"2x nearest neighbour")
 result_linear_2x   = do_upscale(linear_2x(image),"2x linear")
 result_lines_2x    = do_upscale(lines_2x(image),"2x lines")
@@ -948,19 +955,15 @@ result_eagle_2x    = do_upscale(eagle_2x(image),"2x eagle")
 result_scale_2x    = do_upscale(scale_2x(image),"2x scale")
 result_hq_2x       = do_upscale(hq_2x(image),"2x hq")
 result_epx_2x      = do_upscale(epx_2x(image),"2x epx")
-
 result_nn_3x       = do_upscale(nearest_neighbour_3x(image),"3x nearest neighbour")
 result_linear_3x   = do_upscale(linear_3x(image),"3x linear")
 result_eagle_3x    = do_upscale(eagle_3x(image),"3x eagle")
 result_eagle_3xb   = do_upscale(eagle_3xb(image),"3x eagle b")
 result_scale_3x    = do_upscale(scale_3x(image),"3x scale")
-
 result_exp_a       = do_upscale(experiment_a_3x(image),"3x experimental a")
-
 # combines:
 result_avg_eagle_scale_hq_epx_2x = average_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
 result_avg_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_avg.png","PNG")
-
 result_rnd_eagle_scale_hq_epx_2x = random_image([result_eagle_2x,result_scale_2x,result_hq_2x,result_epx_2x])
 result_rnd_eagle_scale_hq_epx_2x.save("eagle_scale_hq_epx_rnd.png","PNG")
 """
