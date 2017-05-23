@@ -314,6 +314,16 @@ class UpscaleAlgorithm:
     self.pixel3_output = fix_output(self.pixel3_output)
 
   def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
+    # correct outputs
+
+    def correct_output(output):
+      return filter(lambda item: item[0] < len(self.conditions),output[:-1]) + [output[-1]]
+
+    self.pixel0_output = correct_output(self.pixel0_output)
+    self.pixel1_output = correct_output(self.pixel1_output)
+    self.pixel2_output = correct_output(self.pixel2_output)
+    self.pixel3_output = correct_output(self.pixel3_output)
+
     # correct condition references
 
     for i in range(len(self.conditions)):
@@ -346,7 +356,7 @@ class RandomGenerator(object):
     if seed_number >= 0:
       random.seed(seed_number)
 
-  def generateRandomCondition(self, condition_index, max_depth=2, generate_reference=False):
+  def generate_random_condition(self, condition_index, max_depth=2, generate_reference=False):
 
     random_number = random.randint(0,5 if (condition_index == 0 or not generate_reference) else 6)
 
@@ -363,10 +373,10 @@ class RandomGenerator(object):
         return ConditionPixelIsBrighter( pixel1, pixel2 )
     elif random_number in (2,3,4,5):
 
-      condition1 = self.generateRandomCondition(condition_index, max_depth - 1,True)
+      condition1 = self.generate_random_condition(condition_index, max_depth - 1,True)
 
       if random_number != 5:
-        condition2 = self.generateRandomCondition(condition_index, max_depth - 1,True)
+        condition2 = self.generate_random_condition(condition_index, max_depth - 1,True)
 
       if random_number == 2:
         return ConditionAnd( condition1, condition2)
@@ -379,7 +389,7 @@ class RandomGenerator(object):
     else:
       return ConditionReference( random.randint(0,condition_index - 1) )
 
-  def generateRandomAlgorithm(self):
+  def generate_random_algorithm(self):
     result = UpscaleAlgorithm()
 
     def random_switch_statement(alg):
@@ -397,7 +407,7 @@ class RandomGenerator(object):
       return res
 
     for i in range(MAX_CONDITIONS):
-      result.conditions.append(self.generateRandomCondition(i))
+      result.conditions.append(self.generate_random_condition(i))
 
       if random.randint(0,5) == 0:
         break
@@ -409,7 +419,7 @@ class RandomGenerator(object):
 
     return result
 
-  def randomizeAlgorithm(self, alg):
+  def randomize_algorithm(self, alg):
     
     def shuffle_output(output):
       if len(output) == 1:
@@ -430,26 +440,55 @@ class RandomGenerator(object):
 
       return output
 
-    alg.pixel0_output = shuffle_output(alg.pixel0_output) 
-    alg.pixel1_output = shuffle_output(alg.pixel1_output) 
-    alg.pixel2_output = shuffle_output(alg.pixel2_output) 
-    alg.pixel3_output = shuffle_output(alg.pixel3_output) 
+    random_no = random.randint(0,1)
 
-    random.shuffle(alg.conditions)    # references will be corrected by normalization
+    if random_no == 0:        # method 1 - shuffle outputs
+      alg.pixel0_output = shuffle_output(alg.pixel0_output) 
+      alg.pixel1_output = shuffle_output(alg.pixel1_output)
+      alg.pixel2_output = shuffle_output(alg.pixel2_output) 
+      alg.pixel3_output = shuffle_output(alg.pixel3_output) 
+    elif random_no == 1:      # method 2 - shuffle conditions
+      random.shuffle(alg.conditions)    # references will be corrected by normalization
 
-    alg.normalize() 
+    alg.normalize()
 
+  def combine_algorithms(self, alg1, alg2):
+   result = UpscaleAlgorithm()
 
+   random_no = random.randint(0,0)
 
-r = RandomGenerator(48)
-a1 = r.generateRandomAlgorithm()
+   if random_no == 0:        # method 1 - interlace conditions and switches
+     new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
 
+     for i in range(len(new_conditions)):
+       if i % 2 == 0:
+         new_conditions[i] = alg1.conditions[i] if i < len(alg1.conditions) else alg2.conditions[i]
+       else:
+         new_conditions[i] = alg2.conditions[i] if i < len(alg2.conditions) else alg1.conditions[i]
 
-ccc = ConditionReference(3)
-a1.conditions[2] = ConditionAnd(ConditionNot(ConditionFalse()),ConditionOr(ConditionReference(0),ConditionReference(0)))
+       a1 = alg1
+       a2 = alg2
+
+       if random.randint(0,1) == 0:
+         a1 = alg2
+         a2 = alg1
+
+       result.conditions = new_conditions
+
+       result.pixel0_output = a1.pixel0_output
+       result.pixel1_output = a2.pixel1_output
+       result.pixel2_output = a1.pixel2_output
+       result.pixel3_output = a2.pixel3_output
+  
+   result.normalize()
+     
+   return result
+
+r = RandomGenerator(60)
+a1 = r.generate_random_algorithm()
+a2 = r.generate_random_algorithm()
 
 print(a1.to_python_code())
-a1.normalize()
-print(a1.to_python_code())
-
+print(a2.to_python_code())
+print(r.combine_algorithms(a1,a2).to_python_code())
 
