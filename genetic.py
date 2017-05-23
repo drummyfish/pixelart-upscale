@@ -18,6 +18,9 @@ class NeighbourhoodCondition(object):
   def remap_references(self, new_remap):
     pass
 
+  def references_condition(self, index):
+    return False
+
 class ConditionReference(NeighbourhoodCondition):     # reference to a separate condition in condition list
   def __init__(self, condition_index):
     super(ConditionReference,self).__init__()
@@ -26,6 +29,9 @@ class ConditionReference(NeighbourhoodCondition):     # reference to a separate 
 
   def remap_references(self, new_remap):
     self.operands[0] = new_remap[self.operands[0]]
+
+  def references_condition(self, index):
+    return index == self.operands[0]
 
   def to_python_code(self):
     if self.operands[0] < 0:     # non-existing
@@ -41,6 +47,13 @@ class ConditionLogical(NeighbourhoodCondition):
    def remap_references(self, new_remap):
      for child in self.operands:
        child.remap_references(new_remap)
+
+   def references_condition(self, index):
+     for child in self.operands:
+       if child.references_condition(index):
+         return True
+
+     return False
 
 class ConditionAnd(ConditionLogical):
 
@@ -178,9 +191,34 @@ class UpscaleAlgorithm:
     for condition in self.conditions:
       condition.remap_references(index_remap)
 
-  def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
-    pass
+    # remap the switches
 
+    def fix_output(output):
+      return map(lambda item: item if item[0] <= index else (item[0] - 1,item[1]),output)
+
+    self.pixel0_output = fix_output(self.pixel0_output)
+    self.pixel1_output = fix_output(self.pixel1_output)
+    self.pixel2_output = fix_output(self.pixel2_output)
+    self.pixel3_output = fix_output(self.pixel3_output)
+
+  def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
+    used = [False for c in self.conditions]
+
+    for i in range(len(self.conditions)):
+      for j in range(i + 1,len(self.conditions)):
+        if self.conditions[j].references_condition(i):
+          used[i] = True
+          break
+
+    for output in [self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output]:
+      for item in output[:-1]:  # last item's condition is not used
+        used[item[0]] = True
+
+    print(used)
+
+    for i in reversed(range(len(self.conditions))):
+      if not used[i]:
+        self.delete_condition(i)
 
 class RandomGenerator(object):
  
@@ -249,15 +287,14 @@ class RandomGenerator(object):
     result.pixel2_output = random_switch_statement(result)
     result.pixel3_output = random_switch_statement(result)
 
-    result.normalize()
-
     return result
 
-r = RandomGenerator(30)
+r = RandomGenerator(31)
 
 a1 = r.generateRandomAlgorithm()
-#a2 = r.generateRandomAlgorithm()
 
 print(a1.to_python_code())
-a1.delete_condition(6)
+
+a1.normalize()
+
 print(a1.to_python_code())
