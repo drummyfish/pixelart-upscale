@@ -15,16 +15,34 @@ class NeighbourhoodCondition(object):
   def to_python_code(self):
     return "???"
 
+  def remap_references(self, new_remap):
+    pass
+
 class ConditionReference(NeighbourhoodCondition):     # reference to a separate condition in condition list
   def __init__(self, condition_index):
-    self.number_of_operands = 1
     super(ConditionReference,self).__init__()
+    self.number_of_operands = 1
     self.operands = [condition_index]
 
+  def remap_references(self, new_remap):
+    self.operands[0] = new_remap[self.operands[0]]
+
   def to_python_code(self):
+    if self.operands[0] < 0:     # non-existing
+      return "True"
+
     return "c" + str(self.operands[0])
 
-class ConditionAnd(NeighbourhoodCondition):
+class ConditionLogical(NeighbourhoodCondition):
+
+   def __init__(self):
+     super(ConditionLogical,self).__init__()
+
+   def remap_references(self, new_remap):
+     for child in self.operands:
+       child.remap_references(new_remap)
+
+class ConditionAnd(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
     super(ConditionAnd,self).__init__()
@@ -33,7 +51,7 @@ class ConditionAnd(NeighbourhoodCondition):
   def to_python_code(self):
     return "(" + self.operands[0].to_python_code() + ") and (" + self.operands[1].to_python_code() + ")"
 
-class ConditionOr(NeighbourhoodCondition):
+class ConditionOr(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
     super(ConditionOr,self).__init__()
@@ -42,7 +60,7 @@ class ConditionOr(NeighbourhoodCondition):
   def to_python_code(self):
     return "(" + self.operands[0].to_python_code() + ") or (" + self.operands[1].to_python_code() + ")"
 
-class ConditionXor(NeighbourhoodCondition):
+class ConditionXor(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
     super(ConditionXor,self).__init__()
@@ -51,7 +69,7 @@ class ConditionXor(NeighbourhoodCondition):
   def to_python_code(self):
     return "(" + self.operands[0].to_python_code() + ") xor (" + self.operands[1].to_python_code() + ")"
 
-class ConditionNot(NeighbourhoodCondition):
+class ConditionNot(ConditionLogical):
 
   def __init__(self, condition):
     super(ConditionNot,self).__init__()
@@ -132,22 +150,33 @@ class UpscaleAlgorithm:
 
       for i in range(len(if_statement)):
 
-        if i == len(if_statement) - 1:
-          result += "else:\n"
-        else:
-          if i == 0:
-            result += "if c" + str(if_statement[i][0]) + ":\n"
+        if len(if_statement) != 1:
+          if i == len(if_statement) - 1:
+            result += "else:\n"
           else:
-            result += "elif c" + str(if_statement[i][0]) + ":\n"
+            if i == 0:
+              result += "if c" + str(if_statement[i][0]) + ":\n"
+            else:
+              result += "elif c" + str(if_statement[i][0]) + ":\n"
           
-        result += "  r" + str(r) + " = p[" + str(if_statement[i][1]) + "] \n"
+          result += "  "
+
+        result += "r" + str(r) + " = p[" + str(if_statement[i][1]) + "] \n"
 
       r += 1
 
     return result
 
   def delete_condition(self, index):
-    pass
+    index_remap = [i if (i < index) else (i - 1) for i in range(len(self.conditions))]
+    index_remap[index] = -1
+
+    del self.conditions[index] 
+
+    # remap reference conditions
+
+    for condition in self.conditions:
+      condition.remap_references(index_remap)
 
   def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
     pass
@@ -155,8 +184,9 @@ class UpscaleAlgorithm:
 
 class RandomGenerator(object):
  
-  def __init__(self, seed_number):
-    random.seed(seed_number)
+  def __init__(self, seed_number=-1):
+    if seed_number >= 0:
+      random.seed(seed_number)
 
   def generateRandomCondition(self, condition_index, max_depth=2, generate_reference=False):
 
@@ -223,7 +253,11 @@ class RandomGenerator(object):
 
     return result
 
+r = RandomGenerator(30)
 
-r = RandomGenerator(50)
+a1 = r.generateRandomAlgorithm()
+#a2 = r.generateRandomAlgorithm()
 
-print(r.generateRandomAlgorithm().to_python_code())
+print(a1.to_python_code())
+a1.delete_condition(6)
+print(a1.to_python_code())
