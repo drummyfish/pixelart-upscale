@@ -21,6 +21,22 @@ class NeighbourhoodCondition(object):
   def references_condition(self, index):
     return False
 
+  def correct_references(self, index):   # makes sure references are only made to previous conditions
+    return
+
+  def simplified(self):
+    return self
+
+  def alwaysTrue(self):
+    return False
+
+  def alwaysFalse(self):
+    return False
+
+  def simplify_children(self):
+    for i in range(len(self.operands)):
+      self.operands[i] = self.operands[i].simplified()
+
 class ConditionReference(NeighbourhoodCondition):     # reference to a separate condition in condition list
   def __init__(self, condition_index):
     super(ConditionReference,self).__init__()
@@ -39,6 +55,19 @@ class ConditionReference(NeighbourhoodCondition):     # reference to a separate 
 
     return "c" + str(self.operands[0])
 
+  def correct_references(self, index):
+    if self.operands[0] >= index:
+      self.operands[0] = -1
+
+  def alwaysTrue(self):
+    return self.operands[0] == -1
+
+  def simplified(self):
+    if self.alwaysTrue():
+      return ConditionTrue()
+
+    return self
+
 class ConditionLogical(NeighbourhoodCondition):
 
    def __init__(self):
@@ -55,6 +84,10 @@ class ConditionLogical(NeighbourhoodCondition):
 
      return False
 
+   def correct_references(self, index):
+     for child in self.operands:
+       child.correct_references(index)
+
 class ConditionAnd(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
@@ -64,6 +97,21 @@ class ConditionAnd(ConditionLogical):
   def to_python_code(self):
     return "(" + self.operands[0].to_python_code() + ") and (" + self.operands[1].to_python_code() + ")"
 
+  def alwaysFalse(self):
+    return self.operands[0].alwaysFalse() or self.operands[1].alwaysFalse()
+
+  def simplified(self):
+    if self.alwaysFalse():
+      return ConditionFalse()
+    elif self.operands[0].alwaysTrue():
+      return self.operands[1]
+    elif self.operands[1].alwaysTrue():
+      return self.operands[0]
+
+    self.simplify_children()
+
+    return self
+
 class ConditionOr(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
@@ -71,8 +119,23 @@ class ConditionOr(ConditionLogical):
     self.operands = [condition_a, condition_b]
 
   def to_python_code(self):
-    return "(" + self.operands[0].to_python_code() + ") or (" + self.operands[1].to_python_code() + ")"
+    return "(" + self.operands[0].to_python_code() + ") or (" + self.operands[1].to_python_code() + ")"   
 
+  def alwaysTrue(self):
+    return self.operands[0].alwaysTrue() or self.operands[1].alwaysTrue()
+
+  def simplified(self):
+    if self.alwaysTrue():
+      return ConditionTrue()
+    elif self.operands[0].alwaysFalse():
+      return self.operands[1]
+    elif self.operands[1].alwaysFalse():
+      return self.operands[0]     
+
+    self.simplify_children()
+
+    return self
+ 
 class ConditionXor(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
@@ -81,6 +144,20 @@ class ConditionXor(ConditionLogical):
 
   def to_python_code(self):
     return "(" + self.operands[0].to_python_code() + ") xor (" + self.operands[1].to_python_code() + ")"
+
+  def simplified(self):
+    if self.operands[0].alwaysFalse():
+      return ConditionNot(self.operands[1])
+    elif self.operands[0].alwaysTrue():
+      return self.operands[1]   
+    if self.operands[1].alwaysFalse():
+      return ConditionNot(self.operands[0])
+    elif self.operands[1].alwaysTrue():
+      return self.operands[0]   
+
+    self.simplify_children()
+
+    return self
 
 class ConditionNot(ConditionLogical):
 
@@ -91,6 +168,41 @@ class ConditionNot(ConditionLogical):
 
   def to_python_code(self):
     return "not (" + self.operands[0].to_python_code() + ")"
+
+  def alwaysFalse(self):
+    return self.operands[0].alwaysTrue()
+
+  def simplified(self):
+    if self.operands[0].alwaysTrue():
+      return ConditionFalse()
+    elif self.operands[0].alwaysFalse():
+      return ConditionTrue()
+
+    return self
+
+class ConditionTrue(ConditionLogical):
+
+  def __init__(self):
+    super(ConditionTrue,self).__init__()
+    self.number_of_operands = 0
+
+  def to_python_code(self):
+    return "True"
+
+  def alwaysTrue(self):
+    return True
+
+class ConditionFalse(ConditionLogical):
+
+  def __init__(self):
+    super(ConditionFalse,self).__init__()
+    self.number_of_operands = 0
+
+  def to_python_code(self):
+    return "False"
+
+  def alwaysFalse(self):
+    return True
 
 class ConditionPixelsAreEqual(NeighbourhoodCondition):
 
@@ -202,6 +314,13 @@ class UpscaleAlgorithm:
     self.pixel3_output = fix_output(self.pixel3_output)
 
   def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
+    # correct condition references
+
+    for i in range(len(self.conditions)):
+      self.conditions[i].correct_references(i)
+
+    # remove unused conditions:
+
     used = [False for c in self.conditions]
 
     for i in range(len(self.conditions)):
@@ -214,11 +333,12 @@ class UpscaleAlgorithm:
       for item in output[:-1]:  # last item's condition is not used
         used[item[0]] = True
 
-    print(used)
-
     for i in reversed(range(len(self.conditions))):
       if not used[i]:
         self.delete_condition(i)
+
+    for i in range(len(self.conditions)):
+      self.conditions[i] = self.conditions[i].simplified()
 
 class RandomGenerator(object):
  
@@ -289,12 +409,47 @@ class RandomGenerator(object):
 
     return result
 
-r = RandomGenerator(31)
+  def randomizeAlgorithm(self, alg):
+    
+    def shuffle_output(output):
+      if len(output) == 1:
+        return output
 
+      condition_indices = map(lambda item: item[0],output[:-1])
+      pixel_indices = map(lambda item: item[1],output) 
+
+      print(condition_indices,pixel_indices)
+
+      random.shuffle(condition_indices)
+      random.shuffle(pixel_indices)
+
+      print(condition_indices,pixel_indices)
+
+      for i in range(len(output)):
+        output[i] = (condition_indices[i] if i < len(output) - 1 else 0,pixel_indices[i])
+
+      return output
+
+    alg.pixel0_output = shuffle_output(alg.pixel0_output) 
+    alg.pixel1_output = shuffle_output(alg.pixel1_output) 
+    alg.pixel2_output = shuffle_output(alg.pixel2_output) 
+    alg.pixel3_output = shuffle_output(alg.pixel3_output) 
+
+    random.shuffle(alg.conditions)    # references will be corrected by normalization
+
+    alg.normalize() 
+
+
+
+r = RandomGenerator(48)
 a1 = r.generateRandomAlgorithm()
 
-print(a1.to_python_code())
 
+ccc = ConditionReference(3)
+a1.conditions[2] = ConditionAnd(ConditionNot(ConditionFalse()),ConditionOr(ConditionReference(0),ConditionReference(0)))
+
+print(a1.to_python_code())
 a1.normalize()
-
 print(a1.to_python_code())
+
+
