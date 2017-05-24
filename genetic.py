@@ -7,6 +7,9 @@ N_MIDDLE = NS / 2
 N_MAX = NS * NS - 1 # maximum pixel number in the neighbourhood
 MAX_CONDITIONS = 100
 
+IMAGE_SIZE = (512,512)
+IMAGE_SIZE2 = (IMAGE_SIZE[0] * 2,IMAGE_SIZE[1] * 2)
+
 def print_progress_info(print_string):    # prints progress about the simulation
   print("INFO: " + print_string)
 
@@ -21,6 +24,9 @@ TRANSFORM_SHIFT_D = 7      # shift 1 pixel down
 TRANSFORM_NONE = 8
 
 ALL_TRANSOFMRS = [i for i in range(9)]
+
+def pixel_error(pixel1, pixel2):
+  return abs(pixel1[0] - pixel2[0]) + abs(pixel1[1] - pixel2[1]) + abs(pixel1[2] - pixel2[2])
 
 def transform_pixel(pixel_index, transform_type):
   if transform_type == TRANSFORM_SHIFT_R:
@@ -363,13 +369,53 @@ class UpscaleAlgorithm(PythonThing):
     result += "  return a\n"
     return result
 
+  # Applies the algorithm to given PIL pixels. Optional dst image
+  # pixels can be provided to store the result. Total error to
+  # compare pixels is returned.
+
+  def apply_to_pixels(self, src_pixels, compare_pixels, dst_pixels=None):
+    print_progress_info("executing algorithm " + str(id(self)))
+
+    error = 0
+
+    exec(self.to_python_code())    # create the function
+
+    for j in range(N_MIDDLE,IMAGE_SIZE[1] - N_MIDDLE):
+      for i in range(N_MIDDLE,IMAGE_SIZE[0] - N_MIDDLE):
+
+        neighbours = []
+
+        for y in range(-1 * N_MIDDLE,N_MIDDLE + 1):
+          for x in range(-1 * N_MIDDLE,N_MIDDLE + 1):
+            neighbours.append(src_pixels[(i + x,j + y)])
+
+        pixels = alg_function(neighbours)
+
+        dst_x = i * 2
+        dst_y = j * 2
+
+        dst_coords = (
+          (dst_x,dst_y),
+          (dst_x + 1,dst_y),
+          (dst_x,dst_y + 1),
+          (dst_x + 1,dst_y + 1)
+          )
+
+        for k in range(4):
+          error += pixel_error(compare_pixels[dst_coords[k]],pixels[k])
+
+          if dst_pixels != None:
+            dst_pixels[dst_coords[k]] = pixels[k]
+
+    return error
+
   def to_python_code(self):
-    result = ""
+    result = "def alg_function(p):\n"
 
     i = 0
 
     for condition in self.conditions:
-      result += "c" + str(i) + " = " + condition.to_python_code() + "\n"
+      result += "  c" + str(i) + " = " + condition.to_python_code() + "\n"
       i += 1
 
     r = 0
@@ -381,20 +427,20 @@ class UpscaleAlgorithm(PythonThing):
 
         if len(if_statement) != 1:
           if i == len(if_statement) - 1:
-            result += "else:\n"
+            result += "  else:\n"
           else:
             if i == 0:
-              result += "if c" + str(if_statement[i][0]) + ":\n"
+              result += "  if c" + str(if_statement[i][0]) + ":\n"
             else:
-              result += "elif c" + str(if_statement[i][0]) + ":\n"
+              result += "  elif c" + str(if_statement[i][0]) + ":\n"
           
           result += "  "
 
-        result += "r" + str(r) + " = p[" + str(if_statement[i][1]) + "] \n"
+        result += "  r" + str(r) + " = p[" + str(if_statement[i][1]) + "] \n"
 
       r += 1
 
-    return result
+    return result + "\n  return (r0,r1,r2,r3)\n"
 
   def delete_condition(self, index):
     print_progress_info("deleting condition " +str(index))
@@ -644,10 +690,27 @@ class RandomGenerator(object):
 #======================
 
 algorithm_nn = UpscaleAlgorithm()
+algorithm_nn.pixel0_output = [(0,40)]
+algorithm_nn.pixel1_output = [(0,40)]
+algorithm_nn.pixel2_output = [(0,40)]
+algorithm_nn.pixel3_output = [(0,40)]
 
-r = RandomGenerator(308)
-a1 = r.generate_random_algorithm()
+src_image = Image.open("test_training.png")  
+src_pixels = src_image.load()
+
+dst_image = Image.new("RGB", IMAGE_SIZE2, "white")
+dst_pixels = dst_image.load()
+
+cmp_image = Image.open("test_training_manual_upscale.png")
+cmp_pixels = cmp_image.load()
+
+print("error: " + str(algorithm_nn.apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)))
+
+dst_image.save("result.png","PNG")
+
+#r = RandomGenerator(308)
+#a1 = r.generate_random_algorithm()
 #a2 = r.generate_random_algorithm()
 
-print(a1.to_python_code())
-print(a1.get_python_constructor())
+#print(a1.to_python_code())
+#print(a1.get_python_constructor())
