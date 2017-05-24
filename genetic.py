@@ -6,6 +6,9 @@ NS = 9              # neighbour size
 N_MAX = NS * NS - 1 # maximum pixel number in the neighbourhood
 MAX_CONDITIONS = 100
 
+def print_progress_info(print_string):    # prints progress about the simulation
+  print("INFO: " + print_string)
+
 class NeighbourhoodCondition(object):
 
   def __init__(self):
@@ -314,6 +317,8 @@ class UpscaleAlgorithm:
     self.pixel3_output = fix_output(self.pixel3_output)
 
   def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
+    print_progress_info("normalizing algorithm " + str(id(self)))
+
     # correct outputs
 
     def correct_output(output):
@@ -357,6 +362,7 @@ class RandomGenerator(object):
       random.seed(seed_number)
 
   def generate_random_condition(self, condition_index, max_depth=2, generate_reference=False):
+    print_progress_info("generating random condition")
 
     random_number = random.randint(0,5 if (condition_index == 0 or not generate_reference) else 6)
 
@@ -389,10 +395,13 @@ class RandomGenerator(object):
     else:
       return ConditionReference( random.randint(0,condition_index - 1) )
 
-  def generate_random_algorithm(self):
+  def generate_random_algorithm(self): 
     result = UpscaleAlgorithm()
+    
+    print_progress_info("generating random algorithm, id = " + str(id(result)))
 
     def random_switch_statement(alg):
+      print_progress_info("generating random pixel output switch")
       res = []
 
       indices = range(len(alg.conditions))
@@ -410,6 +419,7 @@ class RandomGenerator(object):
       result.conditions.append(self.generate_random_condition(i))
 
       if random.randint(0,5) == 0:
+        print_progress_info("enough conditions generated")
         break
 
     result.pixel0_output = random_switch_statement(result)
@@ -420,7 +430,8 @@ class RandomGenerator(object):
     return result
 
   def randomize_algorithm(self, alg):
-    
+    print_progress_info("randomizing algorithm " + str(id(alg)))
+
     def shuffle_output(output):
       if len(output) == 1:
         return output
@@ -440,16 +451,19 @@ class RandomGenerator(object):
 
       return output
 
-    random_no = random.randint(0,2)
+    random_no = random.randint(0,3)
 
     if random_no == 0:        # method 1 - shuffle outputs
+      print_progress_info("using randomizing method 1")
       alg.pixel0_output = shuffle_output(alg.pixel0_output) 
       alg.pixel1_output = shuffle_output(alg.pixel1_output)
       alg.pixel2_output = shuffle_output(alg.pixel2_output) 
       alg.pixel3_output = shuffle_output(alg.pixel3_output) 
     elif random_no == 1:      # method 2 - shuffle conditions
+      print_progress_info("using randomizing method 2")
       random.shuffle(alg.conditions)    # references will be corrected by normalization
     elif random_no == 2:      # method 3 - shuffle pixels
+      print_progress_info("using randomizing method 3")
       pixels = [self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output]
       random.shuffle(pixels)
 
@@ -457,15 +471,22 @@ class RandomGenerator(object):
       self.pixel1_output = pixels[1]
       self.pixel2_output = pixels[2]
       self.pixel3_output = pixels[3]
+    elif random_no == 3:      # method 3 - combine with new random alg.
+      print_progress_info("using randomizing method 4")
+      alg = self.combine_algorithms(alg,self.generate_random_algorithm())
 
     alg.normalize()
 
   def combine_algorithms(self, alg1, alg2):
    result = UpscaleAlgorithm()
+   
+   print_progress_info("combining algorithms " + str(id(alg1)) + " and " + str(id(alg2)) + ", new id = " +str(id(result)))
 
    random_no = random.randint(0,1)
 
    if random_no == 0:        # method 1 - interlace conditions and switches
+     print_progress_info("using combination method 1")
+
      new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
 
      for i in range(len(new_conditions)):
@@ -488,6 +509,8 @@ class RandomGenerator(object):
        result.pixel2_output = a1.pixel2_output
        result.pixel3_output = a2.pixel3_output
    elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
+     print_progress_info("using combination method 2")
+
      result.conditions = alg1.conditions + alg2.conditions
      new_remap = [i + len(alg1.conditions) for i in range(len(alg2.conditions))]
      
@@ -501,7 +524,6 @@ class RandomGenerator(object):
      result.pixel1_output = output_condition_shift(alg2.pixel1_output,len(alg1.conditions))
      result.pixel2_output = alg1.pixel2_output
      result.pixel3_output = output_condition_shift(alg2.pixel3_output,len(alg1.conditions))
-
 
    result.normalize()
      
