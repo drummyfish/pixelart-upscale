@@ -2,8 +2,11 @@ from PIL import Image
 import random
 import math
 import copy
+import traceback
 
 VERBOSE_LEVEL = 2
+
+FAKE_EXECUTE = False     # fast fake executes for testing
 
 NS = 9              # neighbour size
 N_MIDDLE = NS / 2
@@ -416,6 +419,10 @@ class UpscaleAlgorithm(PythonThing):
   # compare pixels is returned.
 
   def apply_to_pixels(self, src_pixels, compare_pixels, dst_pixels=None):
+    if FAKE_EXECUTE:
+      self.score = random.randint(1000000,10000000)
+      return self.score
+
     print_progress_info("executing algorithm " + str(id(self)),2)
 
     error = 0
@@ -639,12 +646,8 @@ class RandomGenerator(object):
       condition_indices = map(lambda item: item[0],output[:-1])
       pixel_indices = map(lambda item: item[1],output) 
 
-      print(condition_indices,pixel_indices)
-
       random.shuffle(condition_indices)
       random.shuffle(pixel_indices)
-
-      print(condition_indices,pixel_indices)
 
       for i in range(len(output)):
         output[i] = (condition_indices[i] if i < len(output) - 1 else 0,pixel_indices[i])
@@ -652,6 +655,21 @@ class RandomGenerator(object):
       return output
 
     random_no = random.randint(0,4)
+
+    # prevent some stuff that would have no effect
+
+    if random_no in (1,4) and len(alg.conditions) == 0:
+      random_no = 3
+
+    if random_no == 2 and (
+      len(alg.pixel0_output) == 1 and
+      len(alg.pixel1_output) == 1 and
+      len(alg.pixel2_output) == 1 and
+      len(alg.pixel3_output) == 1 and
+      alg.pixel0_output[0][1] == alg.pixel1_output[0][1] and
+      alg.pixel1_output[0][1] == alg.pixel2_output[0][1] and
+      alg.pixel1_output[0][1] == alg.pixel3_output[0][1]):
+      random_no = 3
 
     if random_no == 0:        # method 1 - shuffle switches
       print_progress_info("using randomizing method 1 (shuffle output switches)",4)
@@ -841,8 +859,9 @@ while True:
     
     # print info
 
-    algorithms[0].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
-    dst_image.save("gen" + str(generation) + ".png","PNG")   # save the current best preview
+    if not FAKE_EXECUTE:
+      algorithms[0].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
+      dst_image.save("gen" + str(generation) + ".png","PNG")   # save the current best preview
 
     print_progress_info("ladder:",2)
  
@@ -856,6 +875,7 @@ while True:
     print_progress_info("--------------------------",0)
   except Exception as e:
     print_progress_info("ERROR: " + str(e),0)
+    traceback.print_exc() 
 
   generation += 1
 
