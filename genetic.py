@@ -3,11 +3,52 @@ import random
 import math
 
 NS = 9              # neighbour size
+N_MIDDLE = NS / 2
 N_MAX = NS * NS - 1 # maximum pixel number in the neighbourhood
 MAX_CONDITIONS = 100
 
 def print_progress_info(print_string):    # prints progress about the simulation
   print("INFO: " + print_string)
+
+TRANSFORM_ROTATE_CW = 0    # rotate 90 degrees CW
+TRANSFORM_ROTATE_CCW = 1   # rotate 90 degrees CCW
+TRANSFORM_FLIP_H = 2       # flip horizontally
+TRANSFORM_FLIP_V = 3       # flip vertically
+TRANSFORM_SHIFT_R = 4      # shift 1 pixel to the right
+TRANSFORM_SHIFT_L = 5      # shift 1 pixel to the left
+TRANSFORM_SHIFT_U = 6      # shift 1 pixel up
+TRANSFORM_SHIFT_D = 7      # shift 1 pixel down
+TRANSFORM_NONE = 8
+
+ALL_TRANSOFMRS = [i for i in range(9)]
+
+def transform_pixel(pixel_index, transform_type):
+  if transform_type == TRANSFORM_SHIFT_R:
+    return min(pixel_index + 1,(pixel_index / NS + 1) * NS - 1)
+  elif transform_type == TRANSFORM_SHIFT_L:
+    return max(pixel_index - 1,(pixel_index / NS) * NS)
+  elif transform_type == TRANSFORM_SHIFT_U:
+    new_index = pixel_index - NS
+    return new_index if new_index >= 0 else pixel_index
+  elif transform_type == TRANSFORM_SHIFT_D:
+    new_index = pixel_index + NS
+    return new_index if new_index <= N_MAX else pixel_index
+  elif transform_type == TRANSFORM_FLIP_H:
+    middle = pixel_index / NS * NS + N_MIDDLE
+    dx = pixel_index - middle 
+    return middle - dx 
+  elif transform_type == TRANSFORM_FLIP_V:
+    x = pixel_index % NS
+    dy = pixel_index / NS - N_MIDDLE 
+    return (N_MIDDLE - dy) * NS + x
+  elif transform_type == TRANSFORM_ROTATE_CW:
+    x = pixel_index % NS
+    y = pixel_index / NS
+    return transform_pixel(x * NS + y,TRANSFORM_FLIP_H)
+  elif transform_type == TRANSFORM_ROTATE_CCW:
+    return transform_pixel(transform_pixel(transform_pixel(pixel_index,TRANSFORM_ROTATE_CW),TRANSFORM_ROTATE_CW),TRANSFORM_ROTATE_CW)
+  else:
+    return pixel_index
 
 class NeighbourhoodCondition(object):
 
@@ -39,6 +80,9 @@ class NeighbourhoodCondition(object):
   def simplify_children(self):
     for i in range(len(self.operands)):
       self.operands[i] = self.operands[i].simplified()
+
+  def apply_transform(self,transform_type):
+    pass
 
 class ConditionReference(NeighbourhoodCondition):     # reference to a separate condition in condition list
   def __init__(self, condition_index):
@@ -90,6 +134,10 @@ class ConditionLogical(NeighbourhoodCondition):
    def correct_references(self, index):
      for child in self.operands:
        child.correct_references(index)
+
+   def apply_transform(self, transform_type):
+     for operand in self.operands:
+       operand.apply_transform(transform_type)
 
 class ConditionAnd(ConditionLogical):
 
@@ -207,7 +255,16 @@ class ConditionFalse(ConditionLogical):
   def alwaysFalse(self):
     return True
 
-class ConditionPixelsAreEqual(NeighbourhoodCondition):
+class ConditionPixel(NeighbourhoodCondition):
+
+  def __init__(self): 
+    super(ConditionPixel,self).__init__()
+
+  def apply_transform(self, transform_type):
+    for i in range(len(self.operands)):
+      self.operands[i] = transform_pixel(self.operands[i],transform_type)
+
+class ConditionPixelsAreEqual(ConditionPixel):
 
   def __init__(self, pixel_a, pixel_b):
     super(ConditionPixelsAreEqual,self).__init__()
@@ -216,7 +273,7 @@ class ConditionPixelsAreEqual(NeighbourhoodCondition):
   def to_python_code(self):
     return "equal(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
 
-class ConditionPixelIsBrighter(NeighbourhoodCondition):
+class ConditionPixelIsBrighter(ConditionPixel):
 
   def __init__(self, pixel_a, pixel_b):
     super(ConditionPixelIsBrighter,self).__init__()
@@ -296,6 +353,8 @@ class UpscaleAlgorithm:
     return result
 
   def delete_condition(self, index):
+    print_progress_info("deleting condition " +str(index))
+
     index_remap = [i if (i < index) else (i - 1) for i in range(len(self.conditions))]
     index_remap[index] = -1
 
@@ -347,6 +406,8 @@ class UpscaleAlgorithm:
     for output in [self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output]:
       for item in output[:-1]:  # last item's condition is not used
         used[item[0]] = True
+
+    print_progress_info("condition usage: " + str(used))
 
     for i in reversed(range(len(self.conditions))):
       if not used[i]:
@@ -427,6 +488,8 @@ class RandomGenerator(object):
     result.pixel2_output = random_switch_statement(result)
     result.pixel3_output = random_switch_statement(result)
 
+    result.normalize()
+
     return result
 
   def randomize_algorithm(self, alg):
@@ -451,29 +514,34 @@ class RandomGenerator(object):
 
       return output
 
-    random_no = random.randint(0,3)
+    random_no = random.randint(0,4)
 
-    if random_no == 0:        # method 1 - shuffle outputs
-      print_progress_info("using randomizing method 1")
+    if random_no == 0:        # method 1 - shuffle switches
+      print_progress_info("using randomizing method 1 (shuffle output switches)")
       alg.pixel0_output = shuffle_output(alg.pixel0_output) 
       alg.pixel1_output = shuffle_output(alg.pixel1_output)
       alg.pixel2_output = shuffle_output(alg.pixel2_output) 
       alg.pixel3_output = shuffle_output(alg.pixel3_output) 
     elif random_no == 1:      # method 2 - shuffle conditions
-      print_progress_info("using randomizing method 2")
+      print_progress_info("using randomizing method 2 (shuffle conditions)")
       random.shuffle(alg.conditions)    # references will be corrected by normalization
     elif random_no == 2:      # method 3 - shuffle pixels
-      print_progress_info("using randomizing method 3")
-      pixels = [self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output]
+      print_progress_info("using randomizing method 3 (shuffle output pixels)")
+      pixels = [alg.pixel0_output,alg.pixel1_output,alg.pixel2_output,alg.pixel3_output]
       random.shuffle(pixels)
 
-      self.pixel0_output = pixels[0]
-      self.pixel1_output = pixels[1]
-      self.pixel2_output = pixels[2]
-      self.pixel3_output = pixels[3]
+      alg.pixel0_output = pixels[0]
+      alg.pixel1_output = pixels[1]
+      alg.pixel2_output = pixels[2]
+      alg.pixel3_output = pixels[3]
     elif random_no == 3:      # method 3 - combine with new random alg.
-      print_progress_info("using randomizing method 4")
+      print_progress_info("using randomizing method 4 (combine with random)")
       alg = self.combine_algorithms(alg,self.generate_random_algorithm())
+    elif random_no == 4:      # method 4 - apply transform to pixels
+      print_progress_info("using randomizing method 4 (pixel transform)")
+      
+      for c in alg.conditions:
+        c.apply_transform(random.choice(ALL_TRANSOFMRS))
 
     alg.normalize()
 
@@ -485,7 +553,7 @@ class RandomGenerator(object):
    random_no = random.randint(0,1)
 
    if random_no == 0:        # method 1 - interlace conditions and switches
-     print_progress_info("using combination method 1")
+     print_progress_info("using combination method 1 (interlace)")
 
      new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
 
@@ -509,7 +577,7 @@ class RandomGenerator(object):
        result.pixel2_output = a1.pixel2_output
        result.pixel3_output = a2.pixel3_output
    elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
-     print_progress_info("using combination method 2")
+     print_progress_info("using combination method 2 (append)")
 
      result.conditions = alg1.conditions + alg2.conditions
      new_remap = [i + len(alg1.conditions) for i in range(len(alg2.conditions))]
@@ -529,11 +597,18 @@ class RandomGenerator(object):
      
    return result
 
-r = RandomGenerator(10)
+#======================
+
+algorithm_nn = UpscaleAlgorithm()
+
+r = RandomGenerator(308)
 a1 = r.generate_random_algorithm()
-a2 = r.generate_random_algorithm()
+#a2 = r.generate_random_algorithm()
 
 print(a1.to_python_code())
-print(a2.to_python_code())
-print(r.combine_algorithms(a1,a2).to_python_code())
+
+r.randomize_algorithm(a1)
+
+print(a1.to_python_code())
+#print(r.combine_algorithms(a1,a2).to_python_code())
 
