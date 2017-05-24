@@ -50,7 +50,18 @@ def transform_pixel(pixel_index, transform_type):
   else:
     return pixel_index
 
-class NeighbourhoodCondition(object):
+class PythonThing(object):               # can be represented in Python
+
+  def to_python_code(self):
+    return ""
+
+  def self_class_name(self):
+    return type(self).__name__
+
+  def get_python_constructor(self):
+    return self.self_class_name() + "()"
+
+class NeighbourhoodCondition(PythonThing):
 
   def __init__(self):
     self.number_of_operands = 2
@@ -64,6 +75,14 @@ class NeighbourhoodCondition(object):
 
   def references_condition(self, index):
     return False
+
+  def get_python_constructor(self): 
+    result = self.self_class_name() + "("
+
+    for operand in self.operands:
+      result += operand.get_python_constructor() + ","
+
+    return result[:-1] + ")"
 
   def correct_references(self, index):   # makes sure references are only made to previous conditions
     return
@@ -101,6 +120,9 @@ class ConditionReference(NeighbourhoodCondition):     # reference to a separate 
       return "True"
 
     return "c" + str(self.operands[0])
+
+  def get_python_constructor(self):
+    return self.self_class_name() + "(" + str(self.operands[0]) + ")"
 
   def correct_references(self, index):
     if self.operands[0] >= index:
@@ -264,6 +286,14 @@ class ConditionPixel(NeighbourhoodCondition):
     for i in range(len(self.operands)):
       self.operands[i] = transform_pixel(self.operands[i],transform_type)
 
+  def get_python_constructor(self): 
+    result = self.self_class_name() + "("
+
+    for operand in self.operands:
+      result += str(operand) + ","
+
+    return result[:-1] + ")"
+
 class ConditionPixelsAreEqual(ConditionPixel):
 
   def __init__(self, pixel_a, pixel_b):
@@ -309,7 +339,7 @@ class ConditionPixelIsBrighter(ConditionPixel):
 # expression on the condition to output one of the pixels
 # of the neighbourhood.
 
-class UpscaleAlgorithm:
+class UpscaleAlgorithm(PythonThing):
 
   def __init__(self):
 
@@ -318,6 +348,20 @@ class UpscaleAlgorithm:
     self.pixel1_output = []
     self.pixel2_output = []
     self.pixel3_output = []
+
+  def get_python_constructor(self):
+    result = "def create_alg():\n  a = " + self.self_class_name() + "()\n"
+
+    for condition in self.conditions:
+      result += "  a.conditions.append(" + condition.get_python_constructor() + ")\n"
+
+    result += "\n  a.pixel0_output = " + str(self.pixel0_output) + "\n"
+    result += "  a.pixel1_output = " + str(self.pixel1_output) + "\n"
+    result += "  a.pixel2_output = " + str(self.pixel2_output) + "\n"
+    result += "  a.pixel3_output = " + str(self.pixel3_output) + "\n"
+
+    result += "  return a\n"
+    return result
 
   def to_python_code(self):
     result = ""
@@ -606,9 +650,4 @@ a1 = r.generate_random_algorithm()
 #a2 = r.generate_random_algorithm()
 
 print(a1.to_python_code())
-
-r.randomize_algorithm(a1)
-
-print(a1.to_python_code())
-#print(r.combine_algorithms(a1,a2).to_python_code())
-
+print(a1.get_python_constructor())
