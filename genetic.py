@@ -440,7 +440,7 @@ class RandomGenerator(object):
 
       return output
 
-    random_no = random.randint(0,1)
+    random_no = random.randint(0,2)
 
     if random_no == 0:        # method 1 - shuffle outputs
       alg.pixel0_output = shuffle_output(alg.pixel0_output) 
@@ -449,13 +449,21 @@ class RandomGenerator(object):
       alg.pixel3_output = shuffle_output(alg.pixel3_output) 
     elif random_no == 1:      # method 2 - shuffle conditions
       random.shuffle(alg.conditions)    # references will be corrected by normalization
+    elif random_no == 2:      # method 3 - shuffle pixels
+      pixels = [self.pixel0_output,self.pixel1_output,self.pixel2_output,self.pixel3_output]
+      random.shuffle(pixels)
+
+      self.pixel0_output = pixels[0]
+      self.pixel1_output = pixels[1]
+      self.pixel2_output = pixels[2]
+      self.pixel3_output = pixels[3]
 
     alg.normalize()
 
   def combine_algorithms(self, alg1, alg2):
    result = UpscaleAlgorithm()
 
-   random_no = random.randint(0,0)
+   random_no = random.randint(0,1)
 
    if random_no == 0:        # method 1 - interlace conditions and switches
      new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
@@ -479,12 +487,27 @@ class RandomGenerator(object):
        result.pixel1_output = a2.pixel1_output
        result.pixel2_output = a1.pixel2_output
        result.pixel3_output = a2.pixel3_output
-  
+   elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
+     result.conditions = alg1.conditions + alg2.conditions
+     new_remap = [i + len(alg1.conditions) for i in range(len(alg2.conditions))]
+     
+     for condition in alg2.conditions:
+       condition.remap_references(new_remap)
+
+     def output_condition_shift(output, offset):
+       return map(lambda item: (item[0] + offset,item[1]),output[:-1]) + [output[-1]]
+
+     result.pixel0_output = alg1.pixel0_output
+     result.pixel1_output = output_condition_shift(alg2.pixel1_output,len(alg1.conditions))
+     result.pixel2_output = alg1.pixel2_output
+     result.pixel3_output = output_condition_shift(alg2.pixel3_output,len(alg1.conditions))
+
+
    result.normalize()
      
    return result
 
-r = RandomGenerator(60)
+r = RandomGenerator(10)
 a1 = r.generate_random_algorithm()
 a2 = r.generate_random_algorithm()
 
