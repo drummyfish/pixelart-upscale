@@ -1,6 +1,9 @@
 from PIL import Image
 import random
 import math
+import copy
+
+VERBOSE_LEVEL = 2
 
 NS = 9              # neighbour size
 N_MIDDLE = NS / 2
@@ -10,8 +13,16 @@ MAX_CONDITIONS = 100
 IMAGE_SIZE = (512,512)
 IMAGE_SIZE2 = (IMAGE_SIZE[0] * 2,IMAGE_SIZE[1] * 2)
 
-def print_progress_info(print_string):    # prints progress about the simulation
-  print("INFO: " + print_string)
+GEN_KEEP_TOP = 5             # how many top best keep from previous gen
+GEN_RANDOMIZE = GEN_KEEP_TOP # how many randomizes to generate in each gen
+GEN_COMBINES = 5             # how many combines to generate in each gen
+GEN_RANDOM = 5               # how many randoms are generated in each gen
+
+GEN_TOTAL = GEN_KEEP_TOP + GEN_RANDOMIZE + GEN_COMBINES + GEN_RANDOM
+
+def print_progress_info(print_string,level=3):    # prints progress about the simulation
+  if level <= VERBOSE_LEVEL:
+    print("INFO: " + print_string)
 
 TRANSFORM_ROTATE_CW = 0    # rotate 90 degrees CW
 TRANSFORM_ROTATE_CCW = 1   # rotate 90 degrees CCW
@@ -32,8 +43,7 @@ def pix_equal(pixel1, pixel2):
   return pixel1[0] == pixel2[0] and pixel1[1] == pixel2[1] and pixel1[2] == pixel2[2]
 
 def pix_similar(pixel1, pixel2):
-  # TODO
-  pass
+  return pixel_error(pixel1,pixel2) < 45
 
 def pix_brightness(pixel):
   return pixel[0] + pixel[1] + pixel[2]   # not like human sight but faster
@@ -331,6 +341,15 @@ class ConditionPixelsAreEqual(ConditionPixel):
   def to_python_code(self):
     return "pix_equal(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
 
+class ConditionPixelsAreSimilar(ConditionPixel):
+   
+  def __init__(self, pixel_a, pixel_b):
+    super(ConditionPixelsAreSimilar,self).__init__()
+    self.operands = [pixel_a, pixel_b]
+
+  def to_python_code(self):
+    return "pix_similar(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
+
 class ConditionPixelIsBrighter(ConditionPixel):
 
   def __init__(self, pixel_a, pixel_b):
@@ -376,6 +395,7 @@ class UpscaleAlgorithm(PythonThing):
     self.pixel1_output = []
     self.pixel2_output = []
     self.pixel3_output = []
+    self.score = -1
 
   def get_python_constructor(self):
     result = "def create_alg():\n  a = " + self.self_class_name() + "()\n"
@@ -396,7 +416,7 @@ class UpscaleAlgorithm(PythonThing):
   # compare pixels is returned.
 
   def apply_to_pixels(self, src_pixels, compare_pixels, dst_pixels=None):
-    print_progress_info("executing algorithm " + str(id(self)))
+    print_progress_info("executing algorithm " + str(id(self)),2)
 
     error = 0
 
@@ -428,6 +448,8 @@ class UpscaleAlgorithm(PythonThing):
 
           if dst_pixels != None:
             dst_pixels[dst_coords[k]] = pixels[k]
+
+    self.score = error
 
     return error
 
@@ -465,7 +487,7 @@ class UpscaleAlgorithm(PythonThing):
     return result + "\n  return (r0,r1,r2,r3)\n"
 
   def delete_condition(self, index):
-    print_progress_info("deleting condition " +str(index))
+    print_progress_info("deleting condition " +str(index),3)
 
     index_remap = [i if (i < index) else (i - 1) for i in range(len(self.conditions))]
     index_remap[index] = -1
@@ -488,13 +510,12 @@ class UpscaleAlgorithm(PythonThing):
     self.pixel3_output = fix_output(self.pixel3_output)
 
   def normalize(self):     # cleans the algorithm (drops unused conditions etc.)
-    print_progress_info("normalizing algorithm " + str(id(self)))
+    print_progress_info("normalizing algorithm " + str(id(self)),3)
 
     # correct outputs
 
     def correct_output(output):
       return filter(lambda item: item[0] < len(self.conditions),output[:-1]) + [output[-1]]
-
     self.pixel0_output = correct_output(self.pixel0_output)
     self.pixel1_output = correct_output(self.pixel1_output)
     self.pixel2_output = correct_output(self.pixel2_output)
@@ -519,7 +540,7 @@ class UpscaleAlgorithm(PythonThing):
       for item in output[:-1]:  # last item's condition is not used
         used[item[0]] = True
 
-    print_progress_info("condition usage: " + str(used))
+    print_progress_info("condition usage: " + str(used),4)
 
     for i in reversed(range(len(self.conditions))):
       if not used[i]:
@@ -535,11 +556,11 @@ class RandomGenerator(object):
       random.seed(seed_number)
 
   def generate_random_condition(self, condition_index, max_depth=2, generate_reference=False):
-    print_progress_info("generating random condition")
+    print_progress_info("generating random condition",3)
 
-    random_number = random.randint(0,6 if (condition_index == 0 or not generate_reference) else 7)
+    random_number = random.randint(0,7 if (condition_index == 0 or not generate_reference) else 8)
 
-    if random_number in (0,1) or max_depth == 0:
+    if random_number in (0,1,2) or max_depth == 0:
       pixel1 = random.randint(0,N_MAX)
       pixel2 = pixel1
 
@@ -548,22 +569,22 @@ class RandomGenerator(object):
 
       if random_number == 0:
         return ConditionPixelsAreEqual( pixel1, pixel2 )
+      elif random_number == 1:
+        return ConditionPixelsAreSimilar( pixel1, pixel2 )
       else:
         return ConditionPixelIsBrighter( pixel1, pixel2 )
-    elif random_number in (2,3,4,5,6):
+    elif random_number in (3,4,5,6,7):
 
       condition1 = self.generate_random_condition(condition_index, max_depth - 1,True)
+      condition2 = self.generate_random_condition(condition_index, max_depth - 1,True)
 
-      if random_number != 5:
-        condition2 = self.generate_random_condition(condition_index, max_depth - 1,True)
-
-      if random_number == 2:
+      if random_number == 3:
         return ConditionAnd( condition1, condition2)
-      elif random_number == 3:
-        return ConditionOr( condition1, condition2)
       elif random_number == 4:
-        return ConditionXor( condition1, condition2)
+        return ConditionOr( condition1, condition2)
       elif random_number == 5:
+        return ConditionXor( condition1, condition2)
+      elif random_number == 6:
         return ConditionRandom()
       else:
         return ConditionNot( condition1 )
@@ -573,20 +594,22 @@ class RandomGenerator(object):
   def generate_random_algorithm(self): 
     result = UpscaleAlgorithm()
     
-    print_progress_info("generating random algorithm, id = " + str(id(result)))
+    print_progress_info("generating random algorithm, id = " + str(id(result)),2)
 
     def random_switch_statement(alg):
-      print_progress_info("generating random pixel output switch")
+      print_progress_info("generating random pixel output switch",3)
       res = []
 
       indices = range(len(alg.conditions))
       random.shuffle(indices)
 
       for i in indices:
-        res.append( (i,random.randint(0,N_MAX)) )
-
         if random.randint(0,2) == 0:
           break
+        
+        res.append( (i,random.randint(0,N_MAX)) )
+
+      res.append( (0,random.randint(0,N_MAX)) ) # default 
 
       return res
 
@@ -594,7 +617,7 @@ class RandomGenerator(object):
       result.conditions.append(self.generate_random_condition(i))
 
       if random.randint(0,5) == 0:
-        print_progress_info("enough conditions generated")
+        print_progress_info("enough conditions generated",4)
         break
 
     result.pixel0_output = random_switch_statement(result)
@@ -607,7 +630,7 @@ class RandomGenerator(object):
     return result
 
   def randomize_algorithm(self, alg):
-    print_progress_info("randomizing algorithm " + str(id(alg)))
+    print_progress_info("randomizing algorithm " + str(id(alg)),3)
 
     def shuffle_output(output):
       if len(output) == 1:
@@ -631,16 +654,16 @@ class RandomGenerator(object):
     random_no = random.randint(0,4)
 
     if random_no == 0:        # method 1 - shuffle switches
-      print_progress_info("using randomizing method 1 (shuffle output switches)")
+      print_progress_info("using randomizing method 1 (shuffle output switches)",4)
       alg.pixel0_output = shuffle_output(alg.pixel0_output) 
       alg.pixel1_output = shuffle_output(alg.pixel1_output)
       alg.pixel2_output = shuffle_output(alg.pixel2_output) 
       alg.pixel3_output = shuffle_output(alg.pixel3_output) 
     elif random_no == 1:      # method 2 - shuffle conditions
-      print_progress_info("using randomizing method 2 (shuffle conditions)")
+      print_progress_info("using randomizing method 2 (shuffle conditions)",4)
       random.shuffle(alg.conditions)    # references will be corrected by normalization
     elif random_no == 2:      # method 3 - shuffle pixels
-      print_progress_info("using randomizing method 3 (shuffle output pixels)")
+      print_progress_info("using randomizing method 3 (shuffle output pixels)",4)
       pixels = [alg.pixel0_output,alg.pixel1_output,alg.pixel2_output,alg.pixel3_output]
       random.shuffle(pixels)
 
@@ -649,10 +672,10 @@ class RandomGenerator(object):
       alg.pixel2_output = pixels[2]
       alg.pixel3_output = pixels[3]
     elif random_no == 3:      # method 3 - combine with new random alg.
-      print_progress_info("using randomizing method 4 (combine with random)")
+      print_progress_info("using randomizing method 4 (combine with random)",4)
       alg = self.combine_algorithms(alg,self.generate_random_algorithm())
     elif random_no == 4:      # method 4 - apply transform to pixels
-      print_progress_info("using randomizing method 4 (pixel transform)")
+      print_progress_info("using randomizing method 4 (pixel transform)",4)
       
       for c in alg.conditions:
         c.apply_transform(random.choice(ALL_TRANSOFMRS))
@@ -660,14 +683,17 @@ class RandomGenerator(object):
     alg.normalize()
 
   def combine_algorithms(self, alg1, alg2):
+   alg1.normalize()
+   alg2.normalize()
+
    result = UpscaleAlgorithm()
    
-   print_progress_info("combining algorithms " + str(id(alg1)) + " and " + str(id(alg2)) + ", new id = " +str(id(result)))
+   print_progress_info("combining algorithms " + str(id(alg1)) + " and " + str(id(alg2)) + ", new id = " +str(id(result)),4)
 
    random_no = random.randint(0,1)
 
    if random_no == 0:        # method 1 - interlace conditions and switches
-     print_progress_info("using combination method 1 (interlace)")
+     print_progress_info("using combination method 1 (interlace)",4)
 
      new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
 
@@ -691,7 +717,7 @@ class RandomGenerator(object):
        result.pixel2_output = a1.pixel2_output
        result.pixel3_output = a2.pixel3_output
    elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
-     print_progress_info("using combination method 2 (append)")
+     print_progress_info("using combination method 2 (append)",4)
 
      result.conditions = alg1.conditions + alg2.conditions
      new_remap = [i + len(alg1.conditions) for i in range(len(alg2.conditions))]
@@ -747,9 +773,6 @@ algorithm_linear.pixel3_output = [(0,40),(1,39),(2,30),(0,31)]
 #-----
 
 r = RandomGenerator(10)
-a1 = r.generate_random_algorithm()
-
-print(a1.to_python_code())
 
 src_image = Image.open("test_training.png")  
 src_pixels = src_image.load()
@@ -760,15 +783,79 @@ dst_pixels = dst_image.load()
 cmp_image = Image.open("test_training_manual_upscale.png")
 cmp_pixels = cmp_image.load()
 
-print("error: " + str(algorithm_nn.apply_to_pixels(src_pixels,cmp_pixels,None)))
-print("error: " + str(algorithm_eagle.apply_to_pixels(src_pixels,cmp_pixels,None)))
-print("error: " + str(algorithm_linear.apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)))
+#print("error: " + str(algorithm_nn.apply_to_pixels(src_pixels,cmp_pixels,None)))
+#print("error: " + str(algorithm_eagle.apply_to_pixels(src_pixels,cmp_pixels,None)))
+#print("error: " + str(algorithm_linear.apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)))
 
-dst_image.save("result.png","PNG")
+#dst_image.save("result.png","PNG")
 
-#r = RandomGenerator(308)
-#a1 = r.generate_random_algorithm()
-#a2 = r.generate_random_algorithm()
+generation = 0
 
-#print(a1.to_python_code())
-#print(a1.get_python_constructor())
+algorithms = [None for i in range(GEN_TOTAL)]
+
+algorithms[0] = algorithm_nn
+algorithms[1] = algorithm_eagle
+algorithms[2] = algorithm_linear
+algorithms[3] = r.generate_random_algorithm() 
+algorithms[4] = r.generate_random_algorithm()
+
+for i in range(GEN_KEEP_TOP):    # compute the initial score
+  algorithms[i].apply_to_pixels(src_pixels,cmp_pixels)
+
+while True:
+  try:
+    print_progress_info("GENERATION " + str(generation),0)
+
+    # created randomized
+
+    for i in range(GEN_KEEP_TOP):
+      algorithms[i + GEN_KEEP_TOP] = copy.deepcopy(algorithms[i])
+      r.randomize_algorithm(algorithms[i + GEN_KEEP_TOP])
+
+    # create combines
+
+    top_algs = algorithms[:GEN_KEEP_TOP]
+
+    for i in range(GEN_COMBINES):
+      a1 = random.choice(top_algs)
+      a2 = a1
+   
+      while a2 == a1:
+        a2 = random.choice(top_algs)
+
+      algorithms[GEN_KEEP_TOP + GEN_RANDOMIZE + i] = r.combine_algorithms(a1,a2)  
+
+    # create randoms
+
+    for i in range(GEN_RANDOM):
+      algorithms[GEN_KEEP_TOP + GEN_RANDOMIZE + GEN_COMBINES + i] = r.generate_random_algorithm()
+
+    # compute scores
+
+    for i in range(GEN_KEEP_TOP,GEN_TOTAL):    # first top already have their scores
+      print_progress_info("running " + str(i + 1) + "/" + str(GEN_TOTAL),2)
+      algorithms[i].apply_to_pixels(src_pixels,cmp_pixels)
+      print_progress_info("score: " + str(algorithms[i].score),1)
+
+    algorithms.sort(key=lambda a: a.score)
+    
+    # print info
+
+    algorithms[0].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
+    dst_image.save("gen" + str(generation) + ".png","PNG")   # save the current best preview
+
+    print_progress_info("ladder:",2)
+ 
+    for i in range(len(algorithms)):
+      print_progress_info(str(i + 1) +  ": " + str(algorithms[i].score),2)
+
+    print_progress_info("best:",1)
+
+    print_progress_info(algorithms[0].to_python_code(),1)
+    print_progress_info(algorithms[0].get_python_constructor(),1)
+    print_progress_info("--------------------------",0)
+  except Exception as e:
+    print_progress_info("ERROR: " + str(e),0)
+
+  generation += 1
+
