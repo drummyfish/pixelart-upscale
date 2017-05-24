@@ -28,6 +28,19 @@ ALL_TRANSOFMRS = [i for i in range(9)]
 def pixel_error(pixel1, pixel2):
   return abs(pixel1[0] - pixel2[0]) + abs(pixel1[1] - pixel2[1]) + abs(pixel1[2] - pixel2[2])
 
+def pix_equal(pixel1, pixel2):
+  return pixel1[0] == pixel2[0] and pixel1[1] == pixel2[1] and pixel1[2] == pixel2[2]
+
+def pix_similar(pixel1, pixel2):
+  # TODO
+  pass
+
+def pix_brightness(pixel):
+  return pixel[0] + pixel[1] + pixel[2]   # not like human sight but faster
+
+def pix_brighter(pixel1, pixel2):
+  return pix_brightness(pixel1) > pix_brightness(pixel2)
+
 def transform_pixel(pixel_index, transform_type):
   if transform_type == TRANSFORM_SHIFT_R:
     return min(pixel_index + 1,(pixel_index / NS + 1) * NS - 1)
@@ -167,6 +180,15 @@ class ConditionLogical(NeighbourhoodCondition):
      for operand in self.operands:
        operand.apply_transform(transform_type)
 
+class ConditionRandom(ConditionLogical):
+
+  def __init__(self):
+    super(ConditionRandom,self).__init__()
+    self.number_of_operands = 0
+
+  def to_python_code(self):
+    return "(random.randint(0,1) == 1)"
+
 class ConditionAnd(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
@@ -222,7 +244,7 @@ class ConditionXor(ConditionLogical):
     self.operands = [condition_a, condition_b]
 
   def to_python_code(self):
-    return "(" + self.operands[0].to_python_code() + ") xor (" + self.operands[1].to_python_code() + ")"
+    return "(" + self.operands[0].to_python_code() + ") != (" + self.operands[1].to_python_code() + ")"
 
   def simplified(self):
     if self.operands[0].alwaysFalse():
@@ -307,7 +329,7 @@ class ConditionPixelsAreEqual(ConditionPixel):
     self.operands = [pixel_a, pixel_b]
 
   def to_python_code(self):
-    return "equal(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
+    return "pix_equal(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
 
 class ConditionPixelIsBrighter(ConditionPixel):
 
@@ -316,7 +338,7 @@ class ConditionPixelIsBrighter(ConditionPixel):
     self.operands = [pixel_a, pixel_b]
 
   def to_python_code(self):
-    return "brighter(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
+    return "pix_brighter(p[" + str(self.operands[0]) + "],p["  + str(self.operands[1]) + "])"
 
 # Algorithm that filters the image. For neighbourhood
 # of size NS * NS with pixels numbered as
@@ -515,7 +537,7 @@ class RandomGenerator(object):
   def generate_random_condition(self, condition_index, max_depth=2, generate_reference=False):
     print_progress_info("generating random condition")
 
-    random_number = random.randint(0,5 if (condition_index == 0 or not generate_reference) else 6)
+    random_number = random.randint(0,6 if (condition_index == 0 or not generate_reference) else 7)
 
     if random_number in (0,1) or max_depth == 0:
       pixel1 = random.randint(0,N_MAX)
@@ -528,7 +550,7 @@ class RandomGenerator(object):
         return ConditionPixelsAreEqual( pixel1, pixel2 )
       else:
         return ConditionPixelIsBrighter( pixel1, pixel2 )
-    elif random_number in (2,3,4,5):
+    elif random_number in (2,3,4,5,6):
 
       condition1 = self.generate_random_condition(condition_index, max_depth - 1,True)
 
@@ -541,6 +563,8 @@ class RandomGenerator(object):
         return ConditionOr( condition1, condition2)
       elif random_number == 4:
         return ConditionXor( condition1, condition2)
+      elif random_number == 5:
+        return ConditionRandom()
       else:
         return ConditionNot( condition1 )
     else:
@@ -695,6 +719,38 @@ algorithm_nn.pixel1_output = [(0,40)]
 algorithm_nn.pixel2_output = [(0,40)]
 algorithm_nn.pixel3_output = [(0,40)]
 
+#-----
+
+algorithm_eagle = UpscaleAlgorithm()
+algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(39,30),ConditionPixelsAreEqual(30,31)))
+algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(31,32),ConditionPixelsAreEqual(32,41)))
+algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(41,50),ConditionPixelsAreEqual(50,49)))
+algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(49,48),ConditionPixelsAreEqual(48,39)))
+algorithm_eagle.pixel0_output = [(0,30),(0,40)]
+algorithm_eagle.pixel1_output = [(1,32),(0,40)]
+algorithm_eagle.pixel2_output = [(3,48),(0,40)]
+algorithm_eagle.pixel3_output = [(2,50),(0,40)]
+
+#-----
+
+algorithm_linear = UpscaleAlgorithm()
+
+algorithm_linear.conditions.append(ConditionRandom())
+algorithm_linear.conditions.append(ConditionRandom())
+algorithm_linear.conditions.append(ConditionRandom())
+
+algorithm_linear.pixel0_output = [(0,30),(1,31),(2,40),(0,39)]
+algorithm_linear.pixel1_output = [(0,31),(1,40),(2,39),(0,30)]
+algorithm_linear.pixel2_output = [(0,39),(1,30),(2,31),(0,40)]
+algorithm_linear.pixel3_output = [(0,40),(1,39),(2,30),(0,31)]
+
+#-----
+
+r = RandomGenerator(10)
+a1 = r.generate_random_algorithm()
+
+print(a1.to_python_code())
+
 src_image = Image.open("test_training.png")  
 src_pixels = src_image.load()
 
@@ -704,7 +760,9 @@ dst_pixels = dst_image.load()
 cmp_image = Image.open("test_training_manual_upscale.png")
 cmp_pixels = cmp_image.load()
 
-print("error: " + str(algorithm_nn.apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)))
+print("error: " + str(algorithm_nn.apply_to_pixels(src_pixels,cmp_pixels,None)))
+print("error: " + str(algorithm_eagle.apply_to_pixels(src_pixels,cmp_pixels,None)))
+print("error: " + str(algorithm_linear.apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)))
 
 dst_image.save("result.png","PNG")
 
