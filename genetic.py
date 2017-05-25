@@ -202,6 +202,9 @@ class ConditionRandom(ConditionLogical):
   def to_python_code(self):
     return "(random.randint(0,1) == 1)"
 
+  def get_python_constructor(self):
+    return self.self_class_name() + "()"
+
 class ConditionAnd(ConditionLogical):
 
   def __init__(self, condition_a, condition_b):
@@ -654,14 +657,21 @@ class RandomGenerator(object):
 
       return output
 
+    # basic goto methods for special cases
+
     random_no = random.randint(0,4)
+
+    if len(alg.conditions) == 0 and random_no != 4:    # no conditions => add some
+      random_no = 6
+    else:
+      random_no = random.randint(0,5)
 
     # prevent some stuff that would have no effect
 
-    if random_no in (1,4) and len(alg.conditions) == 0:
+    if random_no in (1,4) and len(alg.conditions) < 3:  # only shuffle more conditions
       random_no = 3
 
-    if random_no == 2 and (
+    if random_no == 2 and (                     # can shuffle the same pixels
       len(alg.pixel0_output) == 1 and
       len(alg.pixel1_output) == 1 and
       len(alg.pixel2_output) == 1 and
@@ -670,6 +680,8 @@ class RandomGenerator(object):
       alg.pixel1_output[0][1] == alg.pixel2_output[0][1] and
       alg.pixel1_output[0][1] == alg.pixel3_output[0][1]):
       random_no = 3
+
+    # choose the method:
 
     if random_no == 0:        # method 1 - shuffle switches
       print_progress_info("using randomizing method 1 (shuffle output switches)",4)
@@ -692,11 +704,41 @@ class RandomGenerator(object):
     elif random_no == 3:      # method 3 - combine with new random alg.
       print_progress_info("using randomizing method 4 (combine with random)",4)
       alg = self.combine_algorithms(alg,self.generate_random_algorithm())
-    elif random_no == 4:      # method 4 - apply transform to pixels
-      print_progress_info("using randomizing method 4 (pixel transform)",4)
+    elif random_no == 4:      # method 4 - apply transform to condition pixels
+      print_progress_info("using randomizing method 4 (pixel transform conditions)",4)
       
       for c in alg.conditions:
         c.apply_transform(random.choice(ALL_TRANSOFMRS))
+    elif random_no == 5:      # method 5 - apply transform to pixel outputs
+      print_progress_info("using randomizing method 5 (pixel transform outputs)",4)
+
+      def transform_output(transform_type, output):
+        return map(lambda item: (item[0], transform_pixel(item[1],transform_type)), output)       
+
+      if random.randint(0,1) == 1:
+        alg.pixel0_output = transform_output(random.choice(ALL_TRANSOFMRS),alg.pixel0_output)
+        alg.pixel3_output = transform_output(random.choice(ALL_TRANSOFMRS),alg.pixel3_output)
+      else:
+        alg.pixel1_output = transform_output(random.choice(ALL_TRANSOFMRS),alg.pixel1_output)
+        alg.pixel2_output = transform_output(random.choice(ALL_TRANSOFMRS),alg.pixel2_output)
+    elif random_no == 6:     # method 6 - add/delete conditions
+      print_progress_info("using randomizing method 6 (add/delete conditions)",4)
+
+      if len(alg.conditions) < 5 or random.randint(0,1) == 0: # add
+        alg.conditions.append(self.generate_random_condition(0))
+
+        random_no = random.randint(0,3)
+
+        if random_no == 0:
+          alg.pixel0_output = [(0,random.randint(0,N_MAX))] + alg.pixel0_output 
+        elif random_no == 1:
+          alg.pixel1_output = [(0,random.randint(0,N_MAX))] + alg.pixel1_output 
+        elif random_no == 2:
+          alg.pixel2_output = [(0,random.randint(0,N_MAX))] + alg.pixel2_output 
+        else:
+          alg.pixel3_output = [(0,random.randint(0,N_MAX))] + alg.pixel3_output
+      else:          # delete
+        alg.delete_condition(random,randint(0,len(alg.conditions) - 1))
 
     alg.normalize()
 
@@ -721,19 +763,19 @@ class RandomGenerator(object):
        else:
          new_conditions[i] = alg2.conditions[i] if i < len(alg2.conditions) else alg1.conditions[i]
 
-       a1 = alg1
-       a2 = alg2
+     a1 = alg1
+     a2 = alg2
 
-       if random.randint(0,1) == 0:
-         a1 = alg2
-         a2 = alg1
+     if random.randint(0,1) == 0:
+       a1 = alg2
+       a2 = alg1
 
-       result.conditions = new_conditions
+     result.conditions = new_conditions
 
-       result.pixel0_output = a1.pixel0_output
-       result.pixel1_output = a2.pixel1_output
-       result.pixel2_output = a1.pixel2_output
-       result.pixel3_output = a2.pixel3_output
+     result.pixel0_output = a1.pixel0_output
+     result.pixel1_output = a2.pixel1_output
+     result.pixel2_output = a1.pixel2_output
+     result.pixel3_output = a2.pixel3_output
    elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
      print_progress_info("using combination method 2 (append)",4)
 
@@ -811,14 +853,29 @@ generation = 0
 
 algorithms = [None for i in range(GEN_TOTAL)]
 
-algorithms[0] = algorithm_nn
-algorithms[1] = algorithm_eagle
-algorithms[2] = algorithm_linear
+best_score = 1000000000000
+
+def run_alg(index):
+  global best_score
+ 
+  algorithms[index].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
+
+  if algorithms[index].score < best_score:
+    print_progress_info("BEST so far",2)
+    best_score = algorithms[index].score
+
+    if not FAKE_EXECUTE:
+      dst_image.save("gen" + str(generation) + ".png","PNG")
+      dst_image.save("gen" + str(generation + 1) + ".png","PNG")  # current best will also be starting best for the next gen
+
+algorithms[0] = r.generate_random_algorithm() #algorithm_nn
+algorithms[1] = r.generate_random_algorithm() #algorithm_eagle
+algorithms[2] = r.generate_random_algorithm() #algorithm_linear
 algorithms[3] = r.generate_random_algorithm() 
 algorithms[4] = r.generate_random_algorithm()
 
 for i in range(GEN_KEEP_TOP):    # compute the initial score
-  algorithms[i].apply_to_pixels(src_pixels,cmp_pixels)
+  run_alg(i)
 
 while True:
   try:
@@ -852,21 +909,43 @@ while True:
 
     for i in range(GEN_KEEP_TOP,GEN_TOTAL):    # first top already have their scores
       print_progress_info("running " + str(i + 1) + "/" + str(GEN_TOTAL),2)
-      algorithms[i].apply_to_pixels(src_pixels,cmp_pixels)
+      run_alg(i)
       print_progress_info("score: " + str(algorithms[i].score),1)
 
     algorithms.sort(key=lambda a: a.score)
     
     # print info
 
-    if not FAKE_EXECUTE:
-      algorithms[0].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
-      dst_image.save("gen" + str(generation) + ".png","PNG")   # save the current best preview
-
     print_progress_info("ladder:",2)
  
     for i in range(len(algorithms)):
       print_progress_info(str(i + 1) +  ": " + str(algorithms[i].score),2)
+
+    # clean up the list (remove duplicates)
+
+    print_progress_info("cleaning up the list",2)
+
+    new_list = []
+    scores = []
+
+    for a in algorithms:
+      if not a.score in scores:
+        new_list.append(a)
+        scores.append(a.score)
+
+    print_progress_info("deleted " + str(len(algorithms) - len(new_list)) + " algorithms",2)
+
+    algorithms = []
+
+    for i in range(GEN_TOTAL):
+      if i < len(new_list):
+        algorithms.append(new_list[i])
+      elif i < GEN_KEEP_TOP:
+        algorithms.append(r.generate_random_algorithm())
+      else:
+        algorithms.append(None)
+    
+    # print end info
 
     print_progress_info("best:",1)
 
@@ -875,7 +954,7 @@ while True:
     print_progress_info("--------------------------",0)
   except Exception as e:
     print_progress_info("ERROR: " + str(e),0)
-    traceback.print_exc() 
+    traceback.print_exc()
 
   generation += 1
 
