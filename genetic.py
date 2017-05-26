@@ -402,6 +402,7 @@ class UpscaleAlgorithm(PythonThing):
     self.pixel2_output = []
     self.pixel3_output = []
     self.score = -1
+    self.changes = 0            # how many times the algorithm has been changed
 
   def get_python_constructor(self):
     result = "def create_alg():\n  a = " + self.self_class_name() + "()\n"
@@ -639,7 +640,80 @@ class RandomGenerator(object):
 
     return result
 
+  def randomize_condition(self, condition):   # returns randomized version of a condition
+
+    def helper_function(c):      # returns (change_was_made, new_condition)
+      make_change = random.randint(0,10) == 0
+
+      if isinstance(c,ConditionAnd):
+        if make_change:
+          return (True,ConditionOr(c.operands[0],c.operands[1]))
+      elif isinstance(c,ConditionOr):
+        if make_change:
+          return (True,ConditionXor(c.operands[0],c.operands[1]))
+      elif isinstance(c,ConditionXor):
+        if make_change:
+          return (True,ConditionAnd(c.operands[0],c.operands[1]))
+      elif isinstance(c,ConditionReference):
+        if make_change and c.operands[0] > 0:
+          return (True,ConditionReference(random.randint(0,c.operands[0] - 1)))
+      elif isinstance(c,ConditionRandom):
+        if make_change:
+          if random.randint(0,1) == 0:
+            return (True,ConditionAnd(ConditionRandom(),ConditionRandom()))
+          else:
+            return (True,ConditionOr(ConditionRandom(),ConditionRandom()))
+      elif isinstance(c,ConditionTrue):
+        if make_change:
+          return (True,ConditionFalse())
+      elif isinstance(c,ConditionFalse):
+        if make_change:
+          return (True,ConditionTrue())
+      elif isinstance(c,ConditionPixelsAreEqual):
+        if make_change:
+          if random.randint(0,1) == 0:
+            return (True,ConditionPixelsAreSimilar(c.operands[0],c.operands[1]))
+          else:
+            return (True,ConditionPixelIsBrighter(c.operands[0],c.operands[1]))
+      elif isinstance(c,ConditionPixelsAreSimilar):
+        if make_change: 
+          if random.randint(0,1) == 0:
+            return (True,ConditionPixelsAreEqual(c.operands[0],c.operands[1]))
+          else:
+            return (True,ConditionPixelIsBrighter(c.operands[0],c.operands[1]))
+      elif isinstance(c,ConditionPixelIsBrighter):
+        if make_change:
+          if random.randint(0,1) == 0:
+            return (True,ConditionPixelIsBrighter(c.operands[1],c.operands[0]))
+          else: 
+            return (True,ConditionPixelsAreSimilar(c.operands[0],c.operands[1]))
+ 
+      if isinstance(c,ConditionLogical):
+        for i in range(len(c.operands)):
+          res = helper_function(c.operands[i])
+
+          if res[0]:
+            c.operands[i] = res[1]
+            return (True,c)
+
+      if random.randint(0,15) == 0:
+        return (True,ConditionNot(c))
+
+      return (False,c)
+    
+    for i in range(1000):
+      result = helper_function(condition)
+
+      if result[0]:
+        return result[1]
+
+    # condition couldn't be randomize => return a new random condition
+
+    return self.generate_random_condition()
+
   def randomize_algorithm(self, alg):
+    alg.changes += 1
+
     print_progress_info("randomizing algorithm " + str(id(alg)),3)
 
     def shuffle_output(output):
@@ -657,21 +731,16 @@ class RandomGenerator(object):
 
       return output
 
-    # basic goto methods for special cases
-
-    random_no = random.randint(0,4)
-
-    if len(alg.conditions) == 0 and random_no != 4:    # no conditions => add some
-      random_no = 6
-    else:
-      random_no = random.randint(0,5)
+    random_no = random.randint(0,7)
 
     # prevent some stuff that would have no effect
 
+    if len(alg.conditions) == 0:
+      random_no = 6
     if random_no in (1,4) and len(alg.conditions) < 3:  # only shuffle more conditions
       random_no = 3
 
-    if random_no == 2 and (                     # can shuffle the same pixels
+    if random_no == 2 and (                     # can't shuffle the same pixels
       len(alg.pixel0_output) == 1 and
       len(alg.pixel1_output) == 1 and
       len(alg.pixel2_output) == 1 and
@@ -681,7 +750,7 @@ class RandomGenerator(object):
       alg.pixel1_output[0][1] == alg.pixel3_output[0][1]):
       random_no = 3
 
-    # choose the method:
+    # execute the method:
 
     if random_no == 0:        # method 1 - shuffle switches
       print_progress_info("using randomizing method 1 (shuffle output switches)",4)
@@ -738,7 +807,12 @@ class RandomGenerator(object):
         else:
           alg.pixel3_output = [(0,random.randint(0,N_MAX))] + alg.pixel3_output
       else:          # delete
-        alg.delete_condition(random,randint(0,len(alg.conditions) - 1))
+        alg.delete_condition(random.randint(0,len(alg.conditions) - 1))
+
+    elif random_no == 7:
+      print_progress_info("using randomizing method 7 (randomize conditions)",4)
+      random_index = random.choice(range(len(alg.conditions)))
+      alg.conditions[random_index] = self.randomize_condition(alg.conditions[random_index])
 
     alg.normalize()
 
@@ -747,39 +821,30 @@ class RandomGenerator(object):
    alg2.normalize()
 
    result = UpscaleAlgorithm()
-   
+   result.changes = max(alg1.changes,alg2.changes) + 1   
+
    print_progress_info("combining algorithms " + str(id(alg1)) + " and " + str(id(alg2)) + ", new id = " +str(id(result)),4)
 
    random_no = random.randint(0,1)
 
    if random_no == 0:        # method 1 - interlace conditions and switches
      print_progress_info("using combination method 1 (interlace)",4)
-
-     new_conditions = [None for i in range(max(len(alg1.conditions),len(alg2.conditions)))]
-
-     for i in range(len(new_conditions)):
+     
+     for i in range(max(len(alg1.conditions),len(alg2.conditions))):
        if i % 2 == 0:
-         new_conditions[i] = alg1.conditions[i] if i < len(alg1.conditions) else alg2.conditions[i]
+         result.conditions.append(copy.deepcopy(alg1.conditions[i] if i < len(alg1.conditions) else alg2.conditions[i])) 
        else:
-         new_conditions[i] = alg2.conditions[i] if i < len(alg2.conditions) else alg1.conditions[i]
-
-     a1 = alg1
-     a2 = alg2
-
-     if random.randint(0,1) == 0:
-       a1 = alg2
-       a2 = alg1
-
-     result.conditions = new_conditions
+         result.conditions.append(copy.deepcopy(alg2.conditions[i] if i < len(alg2.conditions) else alg1.conditions[i])) 
 
      result.pixel0_output = a1.pixel0_output
      result.pixel1_output = a2.pixel1_output
      result.pixel2_output = a1.pixel2_output
-     result.pixel3_output = a2.pixel3_output
+     result.pixel3_output = a2.pixel3_output 
+
    elif random_no == 1:      # method 2 - concatenate conditions, interlace switches
      print_progress_info("using combination method 2 (append)",4)
 
-     result.conditions = alg1.conditions + alg2.conditions
+     result.conditions = copy.deepcopy(alg1.conditions) + copy.deepcopy(alg2.conditions)
      new_remap = [i + len(alg1.conditions) for i in range(len(alg2.conditions))]
      
      for condition in alg2.conditions:
@@ -793,12 +858,11 @@ class RandomGenerator(object):
      result.pixel2_output = alg1.pixel2_output
      result.pixel3_output = output_condition_shift(alg2.pixel3_output,len(alg1.conditions))
 
-   result.normalize()
+ #  result.normalize()
      
    return result
 
 #======================
-
 #               |
 #   0  1  2  3  4  5  6  7  8
 #   9  10 11 12 13 14 15 16 17
@@ -867,7 +931,7 @@ algorithm_linear.pixel3_output = [(0,40),(1,39),(2,30),(0,31)]
 
 #-----
 
-r = RandomGenerator(10)
+r = RandomGenerator(100)
 
 src_image = Image.open("test_training.png")  
 src_pixels = src_image.load()
@@ -894,10 +958,10 @@ best_score_progress = []
 
 def run_alg(index):
   global best_score
+
+  print_progress_info(algorithms[index].to_python_code(),3)
  
   algorithms[index].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
-
-  print_progress_info("score: " + str(algorithms[index].score),2)
 
   if algorithms[index].score < best_score:
     print_progress_info("BEST so far",2)
@@ -956,7 +1020,7 @@ while True:
     print_progress_info("ladder:",2)
  
     for i in range(len(algorithms)):
-      print_progress_info(str(i + 1) +  ": " + str(algorithms[i].score),2)
+      print_progress_info(str(i + 1) +  "(" + str(algorithms[i].changes) +"): " + str(algorithms[i].score),2)
 
     # clean up the list (remove duplicates)
 
@@ -985,7 +1049,6 @@ while True:
     # print end info
 
     print_progress_info("best:",1)
-
     print_progress_info(algorithms[0].to_python_code(),1)
     print_progress_info(algorithms[0].get_python_constructor(),1)
 
