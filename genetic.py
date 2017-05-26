@@ -284,7 +284,7 @@ class ConditionNot(ConditionLogical):
     self.operands = [condition]
 
   def to_python_code(self):
-    return "not (" + self.operands[0].to_python_code() + ")"
+    return "(not (" + self.operands[0].to_python_code() + "))"
 
   def alwaysFalse(self):
     return self.operands[0].alwaysTrue()
@@ -799,11 +799,46 @@ class RandomGenerator(object):
 
 #======================
 
+#               |
+#   0  1  2  3  4  5  6  7  8
+#   9  10 11 12 13 14 15 16 17
+#   18 19 20 21 22 23 24 25 26
+#   27 28 29 30 31 32 33 34 35
+# --36 37 38 39 40 41 42 43 44--
+#   45 46 47 48 49 50 51 52 53
+#   54 55 56 57 58 59 60 61 62
+#   63 64 65 66 67 68 69 70 71
+#   72 73 74 75 76 77 78 79 80
+#               |
+
 algorithm_nn = UpscaleAlgorithm()
 algorithm_nn.pixel0_output = [(0,40)]
 algorithm_nn.pixel1_output = [(0,40)]
 algorithm_nn.pixel2_output = [(0,40)]
 algorithm_nn.pixel3_output = [(0,40)]
+
+#-----
+
+algorithm_nn2 = UpscaleAlgorithm()
+algorithm_nn2.pixel0_output = [(0,50)]
+algorithm_nn2.pixel1_output = [(0,50)]
+algorithm_nn2.pixel2_output = [(0,50)]
+algorithm_nn2.pixel3_output = [(0,50)]
+
+#-----
+
+algorithm_scale_2x = UpscaleAlgorithm()
+
+algorithm_scale_2x.conditions.append(ConditionAnd(ConditionNot(ConditionPixelsAreEqual(31,49)),ConditionNot(ConditionPixelsAreEqual(39,41)))) # 0
+algorithm_scale_2x.conditions.append(ConditionAnd(ConditionReference(0),ConditionPixelsAreEqual(39,31))) # 1
+algorithm_scale_2x.conditions.append(ConditionAnd(ConditionReference(0),ConditionPixelsAreEqual(41,31))) # 2
+algorithm_scale_2x.conditions.append(ConditionAnd(ConditionReference(0),ConditionPixelsAreEqual(39,49))) # 3
+algorithm_scale_2x.conditions.append(ConditionAnd(ConditionReference(0),ConditionPixelsAreEqual(41,49))) # 4
+
+algorithm_scale_2x.pixel0_output = [(1,39),(0,40)]
+algorithm_scale_2x.pixel1_output = [(2,41),(0,40)]
+algorithm_scale_2x.pixel2_output = [(3,39),(0,40)]
+algorithm_scale_2x.pixel3_output = [(4,41),(0,40)]
 
 #-----
 
@@ -814,8 +849,8 @@ algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(41,50),Co
 algorithm_eagle.conditions.append(ConditionAnd(ConditionPixelsAreEqual(49,48),ConditionPixelsAreEqual(48,39)))
 algorithm_eagle.pixel0_output = [(0,30),(0,40)]
 algorithm_eagle.pixel1_output = [(1,32),(0,40)]
-algorithm_eagle.pixel2_output = [(3,48),(0,40)]
-algorithm_eagle.pixel3_output = [(2,50),(0,40)]
+algorithm_eagle.pixel2_output = [(2,48),(0,40)]
+algorithm_eagle.pixel3_output = [(3,50),(0,40)]
 
 #-----
 
@@ -855,10 +890,14 @@ algorithms = [None for i in range(GEN_TOTAL)]
 
 best_score = 1000000000000
 
+best_score_progress = []
+
 def run_alg(index):
   global best_score
  
   algorithms[index].apply_to_pixels(src_pixels,cmp_pixels,dst_pixels)
+
+  print_progress_info("score: " + str(algorithms[index].score),2)
 
   if algorithms[index].score < best_score:
     print_progress_info("BEST so far",2)
@@ -866,13 +905,12 @@ def run_alg(index):
 
     if not FAKE_EXECUTE:
       dst_image.save("gen" + str(generation) + ".png","PNG")
-      dst_image.save("gen" + str(generation + 1) + ".png","PNG")  # current best will also be starting best for the next gen
 
-algorithms[0] = r.generate_random_algorithm() #algorithm_nn
-algorithms[1] = r.generate_random_algorithm() #algorithm_eagle
-algorithms[2] = r.generate_random_algorithm() #algorithm_linear
-algorithms[3] = r.generate_random_algorithm() 
-algorithms[4] = r.generate_random_algorithm()
+algorithms[0] = algorithm_nn
+algorithms[1] = algorithm_eagle
+algorithms[2] = algorithm_linear
+algorithms[3] = algorithm_nn2 
+algorithms[4] = algorithm_scale_2x
 
 for i in range(GEN_KEEP_TOP):    # compute the initial score
   run_alg(i)
@@ -910,7 +948,6 @@ while True:
     for i in range(GEN_KEEP_TOP,GEN_TOTAL):    # first top already have their scores
       print_progress_info("running " + str(i + 1) + "/" + str(GEN_TOTAL),2)
       run_alg(i)
-      print_progress_info("score: " + str(algorithms[i].score),1)
 
     algorithms.sort(key=lambda a: a.score)
     
@@ -951,6 +988,10 @@ while True:
 
     print_progress_info(algorithms[0].to_python_code(),1)
     print_progress_info(algorithms[0].get_python_constructor(),1)
+
+    best_score_progress.append(algorithms[0].score / 10000)
+    print_progress_info("simulation progress: " + str(best_score_progress),2)
+
     print_progress_info("--------------------------",0)
   except Exception as e:
     print_progress_info("ERROR: " + str(e),0)
