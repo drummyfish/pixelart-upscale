@@ -28,6 +28,11 @@ def rgb_to_yuv(pixel_rgb):
 
 #----------------------------------------------------------------------------
 
+def multiply_pixel(pixel, value):
+  return(int(pixel[0] * value),int(pixel[1] * value),int(pixel[2] * value))
+
+#----------------------------------------------------------------------------
+
 def compare_pixels_exact(pixel1, pixel2):
   return pixel1[0] == pixel2[0] and pixel1[1] == pixel2[1] and pixel1[2] == pixel2[2]
 
@@ -245,6 +250,38 @@ def lines_2x(image):
     return (
       (pixels[0][0], pixels[0][0]),
       ((0,0,0), (0,0,0))
+      )
+
+  return upscale_n_times(image,2,func,1)
+
+#----------------------------------------------------------------------------
+
+def darkest_2x(image):
+
+  def get_brightest(p1,p2,p3,p4):
+    if pixel_is_brighter(p1,p2):
+      if pixel_is_brighter(p2,p3):
+        return p3
+      else: 
+        return p2
+    else:
+      if pixel_is_brighter(p1,p3):
+        return p3
+
+    return p1
+
+  def func(pixels, coords):
+    a, b, c, d, e, f, g, h, i = neighbour_pixels_to_letters(pixels)
+
+    return (
+        (
+          get_brightest(a,b,d,e),
+          get_brightest(b,c,e,f)
+        ),
+        (
+          get_brightest(d,e,g,h),
+          get_brightest(e,f,h,i)
+        )
       )
 
   return upscale_n_times(image,2,func,1)
@@ -924,7 +961,130 @@ def experiment_c(image):
 
   return upscale_n_times(image,2,func,1)
 
+#----------------------------------------------------------------------------
 
+def experiment_d(input_image, horizontal):
+
+  def decide_pixel(l,r):
+
+    def fits_pattern(pat,left,right): # 0 - dark, 1 - bright, 2 - dont matter
+      both = left + right
+      bright = []
+      dark = []
+
+      for i in range(6):
+        if pat[i] == 0:
+          dark.append(i)
+        elif pat[i] == 1:
+          bright.append(i)
+
+      for b in bright:
+        for d in dark:
+          if not pixel_is_brighter(both[b],both[d]) and not compare_pixels_exact(both[b],both[d]):
+            return False
+
+      return True
+
+    #if fits_pattern( (0,1,2, 2,2,0), row_left, row_right ):
+    #  return row_left[0]
+
+    #if fits_pattern( (2,1,0, 0,2,2), row_left, row_right ):
+    #  return row_left[2]
+
+    if pixel_is_brighter(l[1],r[1]):
+      return l[1]
+
+    return r[1]
+
+  old_size = input_image.size
+
+  if horizontal:
+    new_size = (input_image.size[0] * 2, input_image.size[1])
+  else:
+    new_size = (input_image.size[0], input_image.size[1] * 2)
+
+  result = Image.new("RGB",new_size,"white")
+
+  old_pixels = input_image.load()
+  new_pixels = result.load()
+
+  for j in range(old_size[1]):
+    for i in range(old_size[0]):
+      neigh = get_pixel_neighbours(old_pixels,old_size[0],old_size[1],i,j,1)
+
+      if horizontal:
+        left  = (neigh[0][-1], neigh[0][0], neigh[0][1])
+        right = (neigh[1][-1],  neigh[1][0],  neigh[1][1])
+        pos = (i * 2,j)
+        pos2 = (i * 2 + 1,j)
+      else:
+        left  = (neigh[-1][0], neigh[0][0], neigh[1][0])
+        right = (neigh[-1][1],  neigh[0][1],  neigh[1][1])
+        pos = (i,j * 2)
+        pos2 = (i,j * 2 + 1)
+
+      new_pixels[pos] = old_pixels[(i,j)]
+
+
+      new_pixels[pos2] = decide_pixel(left,right)
+
+  return result
+
+#----------------------------------------------------------------------------
+
+def experiment_f(image):
+
+  def fits_pattern(pat,left,right): # 0 - dark, 1 - bright, 2 - dont matter
+    both = left + right
+    bright = []
+    dark = []
+
+    for i in range(6):
+      if pat[i] == 0:
+        dark.append(i)
+      elif pat[i] == 1:
+        bright.append(i)
+
+    for b in bright:
+      for d in dark:
+        if not pixel_is_brighter(both[b],both[d]) and not compare_pixels_exact(both[b],both[d]):
+          return False
+
+    return True
+
+  def decide_pixel(l,r):
+    if fits_pattern( (2,1,2,2,0,2), l,r):
+      return l[1]
+
+    return r[1]
+
+  def func(pixels, coords):
+    p = pixels
+
+    return (
+        (
+          p[0][0],
+          decide_pixel((p[0][-1],p[0][0],p[0][1]),(p[1][-1],p[1][0],p[1][1]))
+        ),
+        (
+          decide_pixel((p[-1][0],p[0][0],p[1][0]),(p[-1][1],p[0][1],p[1][1])),
+
+          mix_pixels([
+            decide_pixel(
+              (p[0][-1],p[1][0],p[2][1]),
+              (p[-1][0],p[0][1],p[1][2])
+            ),
+
+           decide_pixel(
+               (p[-1][1],p[0][0],p[1][-1]),
+               (p[0][2],p[1][1],p[2][0])
+            )])
+
+
+        )
+      )
+
+  return upscale_n_times(image,2,func,3)
 
 #============================================================================
 
@@ -933,7 +1093,17 @@ def do_upscale(what, save_as_filename):
   what.save(save_as_filename + ".png","PNG")
   return what
   
-image = Image.open("test_training.png")
+image = Image.open("test.png")
+
+#h = experiment_d(image,True)
+#h.save("out_a.png","PNG")
+#v = experiment_d(h,False)
+#v.save("out_b.png","PNG")
+
+#experiment_f(image).save("out_c.png","PNG")
+
+darkest_2x(image).save("2x darkest.png","PNG")
+
 random.seed(0)
 
 """
@@ -943,8 +1113,8 @@ bbb = average_image([aaa])
 bbb.save("experiment b.png","PNG")
 """
 
-rrr = do_upscale(experiment_c(image),"experiment c")
-rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
+#rrr = do_upscale(experiment_c(image),"experiment c")
+#rrr2 = do_upscale(experiment_c(rrr),"experiment c 2")
 
 """
 # basic algorithms:
